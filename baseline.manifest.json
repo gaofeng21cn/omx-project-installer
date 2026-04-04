@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "baseline_name": "agent-contract-baseline",
+  "baseline_version": "0.1.0",
+  "installer_skill": "omx-project-installer",
+  "default_scope": "project",
+  "managed_metadata_file": ".agent-contract-baseline.json",
+  "readme_markers": {
+    "start": "<!-- AGENT-CONTRACT-BASELINE:START -->",
+    "end": "<!-- AGENT-CONTRACT-BASELINE:END -->"
+  },
+  "templates": {
+    "root_agents": "templates/AGENTS.root.template.md",
+    "readme_section": "templates/README.agent-layering.section.md",
+    "dev_hosts_readme": "templates/contracts/dev-hosts/README.md",
+    "dev_hosts_omx_cli": "templates/contracts/dev-hosts/omx-cli.md",
+    "dev_hosts_codex_app": "templates/contracts/dev-hosts/codex-app.md",
+    "runtime_service_contract": "templates/contracts/runtime-service/AGENTS.md",
+    "project_native_contract": "templates/contracts/project-native/AGENTS.md"
+  },
+  "modes": {
+    "runtime-service": {
+      "project_contract_path_template": "contracts/{repo_slug}-runtime-service/AGENTS.md",
+      "project_contract_label": "对外服务 Agent 合同",
+      "project_contract_kind": "runtime service contract"
+    },
+    "project-native": {
+      "project_contract_path_template": "contracts/{repo_slug}-repository/AGENTS.md",
+      "project_contract_label": "项目原生合同",
+      "project_contract_kind": "project-native repository contract"
+    }
+  },
+  "gitignore_entries": [
+    ".omx/",
+    ".codex/"
+  ],
+  "config_inheritance": {
+    "source_scope": "user",
+    "target_scope": "project",
+    "root_keys": [
+      "model_provider",
+      "model",
+      "model_reasoning_effort"
+    ],
+    "table_keys": [
+      "model_providers"
+    ]
+  },
+  "legacy_skill_aliases": {
+    "analyze": {
+      "kind": "wrapper",
+      "target_prompt": "debugger",
+      "description": "Compatibility alias for legacy analyze workflow routing."
+    },
+    "build-fix": {
+      "kind": "wrapper",
+      "target_prompt": "build-fixer",
+      "description": "Compatibility alias for legacy build-fix workflow routing."
+    },
+    "tdd": {
+      "kind": "wrapper",
+      "target_prompt": "test-engineer",
+      "description": "Compatibility alias for legacy test-first workflow routing."
+    },
+    "ecomode": {
+      "kind": "symlink",
+      "target_skill": "ultrawork"
+    },
+    "ultraqa": {
+      "kind": "symlink",
+      "target_skill": "ralph"
+    },
+    "swarm": {
+      "kind": "symlink",
+      "target_skill": "team"
+    }
+  }
+}
