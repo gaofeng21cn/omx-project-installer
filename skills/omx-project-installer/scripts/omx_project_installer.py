@@ -143,6 +143,22 @@ def deepcopy_toml_item(item: Any) -> Any:
     return copy.deepcopy(item)
 
 
+def normalize_toml_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(k): normalize_toml_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [normalize_toml_value(v) for v in value]
+    if isinstance(value, tuple):
+        return [normalize_toml_value(v) for v in value]
+    if hasattr(value, "value"):
+        try:
+            inner = value.value
+            return normalize_toml_value(inner)
+        except Exception:
+            pass
+    return value
+
+
 def reconcile_project_config(target: Path) -> dict[str, Any]:
     result = {
         "applied": False,
@@ -166,14 +182,14 @@ def reconcile_project_config(target: Path) -> dict[str, Any]:
     for key in inheritance["root_keys"]:
         if key in user_doc:
             value = deepcopy_toml_item(user_doc[key])
-            if key not in project_doc or tomlkit.dumps({key: project_doc[key]}) != tomlkit.dumps({key: value}):
+            if key not in project_doc or normalize_toml_value(project_doc[key]) != normalize_toml_value(value):
                 project_doc[key] = value
                 changed = True
                 result["keys_synced"].append(key)
     for table_key in inheritance["table_keys"]:
         if table_key in user_doc:
             value = deepcopy_toml_item(user_doc[table_key])
-            if table_key not in project_doc or tomlkit.dumps({table_key: project_doc[table_key]}) != tomlkit.dumps({table_key: value}):
+            if table_key not in project_doc or normalize_toml_value(project_doc[table_key]) != normalize_toml_value(value):
                 project_doc[table_key] = value
                 changed = True
                 result["tables_synced"].append(table_key)
@@ -205,12 +221,12 @@ def inspect_project_config_inheritance(target: Path) -> dict[str, Any]:
     inheritance = MANIFEST["config_inheritance"]
     for key in inheritance["root_keys"]:
         if key in user_doc:
-            if key not in project_doc or tomlkit.dumps({key: project_doc[key]}) != tomlkit.dumps({key: user_doc[key]}):
+            if key not in project_doc or normalize_toml_value(project_doc[key]) != normalize_toml_value(user_doc[key]):
                 result["in_sync"] = False
                 result["drifted_keys"].append(key)
     for table_key in inheritance["table_keys"]:
         if table_key in user_doc:
-            if table_key not in project_doc or tomlkit.dumps({table_key: project_doc[table_key]}) != tomlkit.dumps({table_key: user_doc[table_key]}):
+            if table_key not in project_doc or normalize_toml_value(project_doc[table_key]) != normalize_toml_value(user_doc[table_key]):
                 result["in_sync"] = False
                 result["drifted_tables"].append(table_key)
     return result
