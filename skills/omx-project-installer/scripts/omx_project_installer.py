@@ -89,12 +89,18 @@ def upsert_marked_section(current: str, rendered_section: str, start: str, end: 
     lines = current.splitlines()
     if not lines:
         return rendered_section.strip() + "\n"
-    insert_at = 1
-    if lines and lines[0].startswith("# "):
-        while insert_at < len(lines) and lines[insert_at].strip():
-            insert_at += 1
-        while insert_at < len(lines) and not lines[insert_at].strip():
-            insert_at += 1
+    insert_at = None
+    for idx, line in enumerate(lines):
+        if line.startswith("## "):
+            insert_at = idx
+            break
+    if insert_at is None:
+        insert_at = 1
+        if lines and lines[0].startswith("# "):
+            while insert_at < len(lines) and lines[insert_at].strip():
+                insert_at += 1
+            while insert_at < len(lines) and not lines[insert_at].strip():
+                insert_at += 1
     new_lines = lines[:insert_at] + [""] + rendered_section.strip().splitlines() + [""] + lines[insert_at:]
     return "\n".join(new_lines).rstrip() + "\n"
 
