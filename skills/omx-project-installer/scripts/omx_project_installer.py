@@ -442,6 +442,7 @@ def preserve_existing_root_agents(target: Path, contract_path: Path) -> dict[str
     result["backed_up"] = True
     result["backup_path"] = str(backup)
     if not contract_path.exists():
+        contract_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(root_agents, contract_path)
         result["adopted_to_contract"] = True
     return result
