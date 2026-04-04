@@ -73,3 +73,25 @@
 - `med-autoscience`
 
 这两个项目是 baseline 的种子样本，而不是模板本身。
+
+## 一键安装
+
+在新机器上：
+
+```bash
+git clone https://github.com/gaofeng21cn/agent-contract-baseline.git
+cd agent-contract-baseline
+./install.sh
+```
+
+如果你更喜欢 Python：
+
+```bash
+python install.py
+```
+
+安装完成后，在目标项目目录里直接对 Codex 说：
+
+```text
+使用 $omx-project-installer，把当前项目按 runtime-service 或 project-native 模式完成 OMX project-scope 安装与合同分层收口。
+```
