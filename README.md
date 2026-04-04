@@ -2,6 +2,25 @@
 
 `agent-contract-baseline` 提供一套可复用的仓库级 Agent 合同基线，以及一个兼容性感知的 OMX 项目安装器 skill。
 
+> **Quick Start**
+>
+> 1. 安装 baseline：
+>
+> ```bash
+> git clone https://github.com/gaofeng21cn/agent-contract-baseline.git
+> cd agent-contract-baseline
+> ./install.sh
+> ```
+>
+> 2. 在目标项目目录里直接对 Codex 说：
+>
+> ```text
+> 请安装并使用 https://github.com/gaofeng21cn/agent-contract-baseline ，然后在当前项目目录使用 $omx-project-installer，把当前项目完成 OMX project-scope 安装与合同分层收口。
+> ```
+>
+> 3. 常见问题见：
+> [`docs/faq.md`](docs/faq.md)
+
 目标不是替代 `omx setup`，而是补上它当前没有提供的整合层：
 
 - 将项目根 `AGENTS.md` 从单体文件收束成“薄入口 + 宿主适配层 + project-truth 合同 + 本机 overlay”
@@ -108,3 +127,8 @@ python install.py
 ```text
 使用 $omx-project-installer，把当前项目完成 OMX project-scope 安装与合同分层收口。
 ```
+
+## FAQ
+
+- 常见问题与行为边界：
+  [`docs/faq.md`](docs/faq.md)
