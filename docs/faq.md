@@ -95,3 +95,35 @@ python skills/omx-project-installer/scripts/omx_project_installer.py reconcile -
 ```text
 使用 $omx-project-installer，把当前项目完成 OMX project-scope 安装与合同分层收口。
 ```
+
+## 8. 如果 OMX 上游已经 merge 了 legacy alias 修复，为什么这里还保留兼容修复？
+
+因为“已经 merge”不等于“已经进入正式 release”。
+
+当前判断标准不是 PR 状态，而是：
+
+- 最新正式 release / npm 包里发布的 `templates/AGENTS.md`
+- 是否已经不再引用这些旧路径：
+  - `~/.codex/skills/analyze/SKILL.md`
+  - `~/.codex/skills/ecomode/SKILL.md`
+  - `~/.codex/skills/tdd/SKILL.md`
+  - `~/.codex/skills/build-fix/SKILL.md`
+  - `~/.codex/skills/ultraqa/SKILL.md`
+- 是否已经包含 runtime-only keyword gating
+
+在 upstream 的正式 release 真正包含这些修复之前，安装器会继续保留：
+
+- legacy alias 修复
+- runtime-only keyword gating 兼容修复
+
+这样可以保证项目级安装在当前正式版本的 OMX 上依然可用，而不会因为“PR 已 merge”就提前删掉必要补丁。
+
+## 9. 什么时候可以删掉这些兼容修复？
+
+当且仅当 upstream 发布了一个**新于当前检查版本**的正式 release，并且该 release 中的 `templates/AGENTS.md` 已经同时满足：
+
+1. 所有旧 legacy skill 路径都已移除
+2. `analyze` / `build-fix` / `tdd` / `ecomode` / `ultraqa` / `swarm` 都已切到当前 canonical 逻辑
+3. runtime-only keyword gating 已进入正式模板
+
+到那时，才适合在 baseline 安装器里降级或删除这部分兼容修复。
