@@ -94,3 +94,17 @@ python install.py
 ```text
 使用 $omx-project-installer，把当前项目完成 OMX project-scope 安装与合同分层收口。
 ```
+
+## 给 Codex 的快速开始指令
+
+如果你是要把一条指令直接转发给别人的 Codex，推荐使用下面这句：
+
+```text
+请安装并使用 https://github.com/gaofeng21cn/agent-contract-baseline ，然后在当前项目目录使用 $omx-project-installer，把当前项目完成 OMX project-scope 安装与合同分层收口。
+```
+
+如果对方已经装过这个 skill，更短的版本就是：
+
+```text
+使用 $omx-project-installer，把当前项目完成 OMX project-scope 安装与合同分层收口。
+```
