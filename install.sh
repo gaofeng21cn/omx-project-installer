@@ -19,5 +19,4 @@ ln -sfn "${SOURCE_SKILL_DIR}" "${TARGET_SKILL_DIR}"
 
 echo "Installed ${SKILL_NAME} -> ${TARGET_SKILL_DIR}"
 echo "Next: in a target repo, tell Codex:"
-echo "  使用 \$${SKILL_NAME}，把当前项目按 runtime-service 或 project-native 模式完成 OMX project-scope 安装与合同分层收口。"
-
+echo "  使用 \$${SKILL_NAME}，把当前项目完成 OMX project-scope 安装与合同分层收口。"

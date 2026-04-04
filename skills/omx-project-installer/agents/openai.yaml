@@ -1,4 +1,4 @@
 interface:
   display_name: "OMX Project Installer"
   short_description: "Install OMX into a project with layered contract and config reconciliation"
-  default_prompt: "Use $omx-project-installer to install or refresh OMX in this repository with layered AGENTS contracts and config reconciliation."
+  default_prompt: "Use $omx-project-installer to install or refresh OMX in this repository with layered AGENTS contracts, a unified project-truth contract, and config reconciliation."

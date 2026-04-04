@@ -17,8 +17,8 @@ Role prompts under `prompts/*.md` are narrower execution surfaces. They must fol
 This root `AGENTS.md` is the repository development contract for agents that modify this codebase.
 It governs local Codex/OMX execution, repository workflow, verification discipline, and orchestration behavior while working inside this repository.
 
-It is not the project-native MedAutoScience contract by itself.
-The versioned MedAutoScience project contract lives at `contracts/med-autoscience-repository/AGENTS.md`.
+It is not the project truth contract by itself.
+The versioned project truth contract lives at `contracts/project-truth/AGENTS.md`.
 When repository-specific goals, boundaries, or design priorities matter, treat that contract as the authoritative MedAutoScience truth source.
 
 Local tooling state such as `.omx/` and `.codex/` is development-only and must remain untracked.
@@ -29,7 +29,7 @@ Treat agent guidance in this repository as four layers:
 
 1. Repository development contract: this root `AGENTS.md`
 2. Host adapter contract: `contracts/dev-hosts/`
-3. Project-native MedAutoScience contract: `contracts/med-autoscience-repository/AGENTS.md`
+3. Project truth contract: `contracts/project-truth/AGENTS.md`
 4. Optional local-only overlay: `.omx/local/AGENTS.local.md`
 
 The local-only overlay is intentionally untracked and may contain machine-specific paths, personal workflow preferences, or launcher-specific hints.
@@ -77,9 +77,9 @@ Keep runtime marker contracts stable and non-destructive when overlays are appli
 - Run lint, typecheck, tests, and static analysis after changes.
 - Final reports must include changed files, simplifications made, and remaining risks.
 
-## MedAutoScience project-native contract
+## MedAutoScience project truth contract
 
-The authoritative MedAutoScience repository contract lives at `contracts/med-autoscience-repository/AGENTS.md`.
+The authoritative MedAutoScience repository contract lives at `contracts/project-truth/AGENTS.md`.
 Load and follow it for repository-specific identity, architecture priorities, worktree rules, mutation discipline, and research-direction bias.
 
 <lore_commit_protocol>

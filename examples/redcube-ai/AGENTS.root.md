@@ -17,9 +17,9 @@ Role prompts under `prompts/*.md` are narrower execution surfaces. They must fol
 This root `AGENTS.md` is the repository development contract for agents that modify this codebase.
 It governs local Codex/OMX execution, repository workflow, verification discipline, and orchestration behavior while working inside this repository.
 
-It is **not** the product/runtime contract for external RedCube service agents.
-The versioned external service contract lives at `contracts/redcube-runtime-service/AGENTS.md`.
-When runtime, gateway, family/profile, or deliverable behavior is changed, treat that service contract plus the frozen specs under `docs/superpowers/specs/` as the product truth source.
+It is not the project truth contract by itself.
+The versioned project truth contract lives at `contracts/project-truth/AGENTS.md`.
+When runtime, gateway, family/profile, or deliverable behavior is changed, treat that project truth contract plus the frozen specs under `docs/superpowers/specs/` as the product truth source.
 
 Local tooling state such as `.omx/` and `.codex/` is development-only and must remain untracked.
 
@@ -29,7 +29,7 @@ Treat agent guidance in this repository as four layers:
 
 1. Repository development contract: this root `AGENTS.md`
 2. Host adapter contract: `contracts/dev-hosts/`
-3. Product/runtime service contract: `contracts/redcube-runtime-service/AGENTS.md`
+3. Project truth contract: `contracts/project-truth/AGENTS.md`
 4. Optional local-only overlay: `.omx/local/AGENTS.local.md`
 
 The local-only overlay is intentionally untracked and may contain machine-specific paths, personal workflow preferences, or launcher-specific hints.

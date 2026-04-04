@@ -23,10 +23,9 @@ def main() -> int:
 
     print(f"Installed {skill_name} -> {target_skill_dir}")
     print("Next: in a target repo, tell Codex:")
-    print("  使用 $omx-project-installer，把当前项目按 runtime-service 或 project-native 模式完成 OMX project-scope 安装与合同分层收口。")
+    print("  使用 $omx-project-installer，把当前项目完成 OMX project-scope 安装与合同分层收口。")
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

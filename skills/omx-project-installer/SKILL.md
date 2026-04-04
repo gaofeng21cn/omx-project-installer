@@ -1,13 +1,13 @@
 ---
 name: omx-project-installer
-description: Install or refresh oh-my-codex in a specific project directory while reconciling layered AGENTS contracts, inheriting system-level provider config into project config, and repairing legacy project-scope skill alias compatibility.
+description: Install or refresh oh-my-codex in a specific project directory while reconciling a layered AGENTS contract structure, inheriting system-level provider config into project config, and repairing legacy project-scope skill alias compatibility.
 ---
 
 # OMX Project Installer
 
 ## Overview
 
-Use this skill when you want to install or refresh OMX for a specific repository without hand-managing `AGENTS.md`, host adapter layering, provider config inheritance, or legacy project-scope skill alias repair.
+Use this skill when you want to install or refresh OMX for a specific repository without hand-managing `AGENTS.md`, host adapter layering, `contracts/project-truth/AGENTS.md`, provider config inheritance, or legacy project-scope skill alias repair.
 
 This skill uses the `agent-contract-baseline` repository as the source of truth, then applies a post-setup reconciliation pass on top of `omx setup`.
 
@@ -24,8 +24,7 @@ This skill uses the `agent-contract-baseline` repository as the source of truth,
 Run the installer from the baseline repository checkout:
 
 ```bash
-python skills/omx-project-installer/scripts/omx_project_installer.py install --target /abs/path/to/repo --mode runtime-service
-python skills/omx-project-installer/scripts/omx_project_installer.py install --target /abs/path/to/repo --mode project-native
+python skills/omx-project-installer/scripts/omx_project_installer.py install --target /abs/path/to/repo
 python skills/omx-project-installer/scripts/omx_project_installer.py diff --target /abs/path/to/repo
 python skills/omx-project-installer/scripts/omx_project_installer.py upgrade --target /abs/path/to/repo
 python skills/omx-project-installer/scripts/omx_project_installer.py reconcile --target /abs/path/to/repo
@@ -33,25 +32,30 @@ python skills/omx-project-installer/scripts/omx_project_installer.py reconcile -
 
 ## Workflow
 
-1. Resolve target project and mode
+1. Resolve target project and current contract layout
 2. Run `omx setup --scope project` unless explicitly skipped
 3. Preserve any pre-existing root `AGENTS.md`
-4. Apply thin root contract, host adapters, README layering section, and project truth contract stub or preserved contract path
+4. Apply thin root contract, host adapters, README layering section, and `contracts/project-truth/AGENTS.md`
 5. Reconcile project `.codex/config.toml` with system-level provider and model settings
 6. Repair legacy project-scope skill aliases
 7. Write baseline metadata for later `diff`, `upgrade`, and `reconcile`
 
-## Modes
+## Project Truth
 
-- `runtime-service`
-  - Use when the project has a distinct runtime/service contract separate from the repository development contract
-- `project-native`
-  - Use when the repository itself has a strong native project contract that should be split out of the root `AGENTS.md`
+The installer always converges on one structure:
+
+- root `AGENTS.md`
+- `contracts/dev-hosts/`
+- `contracts/project-truth/AGENTS.md`
+- `.omx/local/AGENTS.local.md`
+
+Repository differences live inside the content of `contracts/project-truth/AGENTS.md`, not in multiple install modes.
 
 ## Compatibility Guarantees
 
 - Root `AGENTS.md` becomes a thin, reproducible entry file
 - `contracts/dev-hosts/` becomes the explicit host adapter layer
+- `contracts/project-truth/AGENTS.md` becomes the single project authority path
 - System-level provider configuration is copied back into project-level `.codex/config.toml`
 - Known legacy alias names are repaired after project-scope setup
 - Project truth contracts are not silently replaced during `upgrade` or `reconcile`

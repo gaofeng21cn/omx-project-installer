@@ -3,12 +3,12 @@ from __future__ import annotations
 
 import argparse
 import copy
+import glob
 import json
 import re
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -27,14 +27,6 @@ def load_manifest() -> dict[str, Any]:
 MANIFEST = load_manifest()
 
 
-@dataclass
-class ModeConfig:
-    name: str
-    project_contract_path_template: str
-    project_contract_label: str
-    project_contract_kind: str
-
-
 def now_utc() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
@@ -49,24 +41,16 @@ def display_name_from_repo(name: str) -> str:
     return " ".join(part.capitalize() for part in parts if part) or "Project"
 
 
-def mode_config(mode: str) -> ModeConfig:
-    raw = MANIFEST["modes"][mode]
-    return ModeConfig(
-        name=mode,
-        project_contract_path_template=raw["project_contract_path_template"],
-        project_contract_label=raw["project_contract_label"],
-        project_contract_kind=raw["project_contract_kind"],
-    )
-
-
 def metadata_path(target: Path) -> Path:
     return target / MANIFEST["managed_metadata_file"]
 
 
-def default_contract_path(target: Path, mode: str) -> Path:
-    cfg = mode_config(mode)
-    slug = repo_slug(target.name)
-    return target / cfg.project_contract_path_template.format(repo_slug=slug)
+def project_truth_relpath() -> str:
+    return MANIFEST["project_truth_path"]
+
+
+def default_contract_path(target: Path) -> Path:
+    return target / project_truth_relpath()
 
 
 def read_text(path: Path) -> str:
@@ -322,9 +306,74 @@ def render_replacements(target: Path, contract_path: Path, display_name: str) ->
     }
 
 
+def parse_contract_path_from_root(root_path: Path) -> Path | None:
+    if not root_path.exists():
+        return None
+    content = read_text(root_path)
+    for pattern in [
+        r"lives at `([^`]+/AGENTS\.md)`",
+        r"truth source(?:\.| lives at)? `([^`]+/AGENTS\.md)`",
+        r"`(contracts/[^`]+/AGENTS\.md)`",
+    ]:
+        match = re.search(pattern, content)
+        if match:
+            candidate = Path(match.group(1))
+            return candidate if candidate.is_absolute() else (root_path.parent / candidate)
+    return None
+
+
+def discover_legacy_contract_source(target: Path, metadata: dict[str, Any] | None, destination: Path) -> Path | None:
+    candidates: list[Path] = []
+    if metadata and metadata.get("project_contract_path"):
+        candidates.append(resolve_contract_path(target, metadata.get("project_contract_path")))
+    parsed = parse_contract_path_from_root(target / "AGENTS.md")
+    if parsed:
+        candidates.append(parsed)
+    for pattern in MANIFEST.get("legacy_project_contract_path_patterns", []):
+        for raw in sorted(glob.glob(str(target / pattern))):
+            candidates.append(Path(raw))
+    seen: set[Path] = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if candidate == destination:
+            continue
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def migrate_project_truth_contract(
+    target: Path,
+    destination: Path,
+    metadata: dict[str, Any] | None,
+) -> dict[str, Any]:
+    result = {
+        "migrated": False,
+        "source_path": "",
+        "removed_legacy_source": False,
+    }
+    if destination.exists():
+        return result
+    source = discover_legacy_contract_source(target, metadata, destination)
+    if not source:
+        return result
+    write_text(destination, read_text(source))
+    result["migrated"] = True
+    result["source_path"] = str(source)
+    if metadata:
+        managed = set(metadata.get("managed_files") or [])
+        rel_source = source.relative_to(target).as_posix() if source.is_relative_to(target) else ""
+        if rel_source and rel_source in managed:
+            backup_file(source, target)
+            source.unlink()
+            result["removed_legacy_source"] = True
+    return result
+
+
 def apply_root_and_contracts(
     target: Path,
-    mode: str,
     contract_path: Path,
     display_name: str,
     force_contract: bool = False,
@@ -344,8 +393,7 @@ def apply_root_and_contracts(
         render_template(template_path("dev_hosts_codex_app"), replacements),
     )
     if force_contract or not contract_path.exists():
-        template_key = "runtime_service_contract" if mode == "runtime-service" else "project_native_contract"
-        write_text(contract_path, render_template(template_path(template_key), replacements))
+        write_text(contract_path, render_template(template_path("project_truth_contract"), replacements))
         return {"project_contract_written": True}
     return {"project_contract_written": False}
 
@@ -373,7 +421,7 @@ def run_omx_setup(target: Path, scope: str, force: bool, verbose: bool, omx_bin:
     subprocess.run(cmd, cwd=target, check=True)
 
 
-def preserve_existing_root_agents(target: Path, contract_path: Path, mode: str) -> dict[str, Any]:
+def preserve_existing_root_agents(target: Path, contract_path: Path) -> dict[str, Any]:
     root_agents = target / "AGENTS.md"
     result = {
         "backed_up": False,
@@ -405,17 +453,23 @@ def managed_files(target: Path, contract_path: Path) -> list[str]:
     ]
 
 
-def write_metadata(target: Path, mode: str, scope: str, contract_path: Path, display_name: str, extra: dict[str, Any]) -> None:
+def write_metadata(target: Path, scope: str, contract_path: Path, display_name: str, extra: dict[str, Any]) -> None:
     payload = {
         "baseline_name": MANIFEST["baseline_name"],
         "baseline_version": MANIFEST["baseline_version"],
-        "mode": mode,
+        "contract_layout": "single-project-truth",
         "scope": scope,
         "display_name": display_name,
-        "project_contract_path": contract_path.relative_to(target).as_posix(),
+        "project_truth_path": contract_path.relative_to(target).as_posix(),
         "managed_files": managed_files(target, contract_path),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+    legacy_mode = extra.pop("legacy_mode", None)
+    legacy_project_contract_path = extra.pop("legacy_project_contract_path", None)
+    if legacy_mode:
+        payload["legacy_mode"] = legacy_mode
+    if legacy_project_contract_path:
+        payload["legacy_project_contract_path"] = legacy_project_contract_path
     payload.update(extra)
     write_text(metadata_path(target), json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
 
@@ -427,9 +481,14 @@ def load_metadata(target: Path) -> dict[str, Any]:
     return json.loads(read_text(path))
 
 
+def resolve_legacy_mode(raw: str | None) -> str | None:
+    if raw in {"runtime-service", "project-native"}:
+        return raw
+    return None
+
+
 def install_or_refresh(
     target: Path,
-    mode: str,
     scope: str,
     contract_path: Path,
     display_name: str,
@@ -437,12 +496,15 @@ def install_or_refresh(
     force_setup: bool,
     verbose: bool,
     omx_bin: str,
+    legacy_mode: str | None = None,
 ) -> dict[str, Any]:
-    preserved = preserve_existing_root_agents(target, contract_path, mode)
+    metadata = json.loads(read_text(metadata_path(target))) if metadata_path(target).exists() else None
+    preserved = preserve_existing_root_agents(target, contract_path)
     if run_setup:
         run_omx_setup(target, scope, force_setup, verbose, omx_bin)
+    migration = migrate_project_truth_contract(target, contract_path, metadata)
     ensured_ignore = ensure_gitignore_entries(target / ".gitignore", MANIFEST["gitignore_entries"])
-    applied = apply_root_and_contracts(target, mode, contract_path, display_name)
+    applied = apply_root_and_contracts(target, contract_path, display_name)
     readme_updated = apply_readme_section(target, contract_path)
     config_result = {"applied": False}
     alias_result = {"repaired": [], "skipped": []}
@@ -451,12 +513,14 @@ def install_or_refresh(
         alias_result = repair_legacy_skill_aliases(target)
     write_metadata(
         target,
-        mode,
         scope,
         contract_path,
         display_name,
         {
+            "legacy_mode": legacy_mode,
+            "legacy_project_contract_path": metadata.get("project_contract_path") if metadata else None,
             "preserved_existing_root": preserved,
+            "project_truth_migration": migration,
             "gitignore_updated": ensured_ignore,
             "readme_updated": readme_updated,
             "config_reconcile": config_result,
@@ -465,10 +529,11 @@ def install_or_refresh(
     )
     return {
         "target": str(target),
-        "mode": mode,
+        "contract_layout": "single-project-truth",
         "scope": scope,
-        "project_contract_path": str(contract_path),
+        "project_truth_path": str(contract_path),
         "preserved_existing_root": preserved,
+        "project_truth_migration": migration,
         "gitignore_updated": ensured_ignore,
         "readme_updated": readme_updated,
         "project_contract_written": applied["project_contract_written"],
@@ -492,7 +557,7 @@ def expected_readme_section(target: Path, contract_path: Path) -> str:
     return match.group(0).strip() if match else rendered
 
 
-def diff_target(target: Path, mode: str, scope: str, contract_path: Path, display_name: str) -> int:
+def diff_target(target: Path, scope: str, contract_path: Path, display_name: str) -> int:
     issues = 0
     checks: list[str] = []
     root_path = target / "AGENTS.md"
@@ -569,9 +634,9 @@ def resolve_display_name(target: Path, raw: str | None) -> str:
     return raw.strip() if raw else display_name_from_repo(target.name)
 
 
-def resolve_contract_path(target: Path, mode: str, raw: str | None) -> Path:
+def resolve_contract_path(target: Path, raw: str | None) -> Path:
     if not raw:
-        return default_contract_path(target, mode)
+        return default_contract_path(target)
     candidate = Path(raw)
     return candidate if candidate.is_absolute() else (target / candidate)
 
@@ -579,10 +644,9 @@ def resolve_contract_path(target: Path, mode: str, raw: str | None) -> Path:
 def command_install(args: argparse.Namespace) -> int:
     target = Path(args.target).resolve()
     display_name = resolve_display_name(target, args.display_name)
-    contract_path = resolve_contract_path(target, args.mode, args.project_contract_path)
+    contract_path = resolve_contract_path(target, args.project_contract_path)
     result = install_or_refresh(
         target=target,
-        mode=args.mode,
         scope=args.scope,
         contract_path=contract_path,
         display_name=display_name,
@@ -590,6 +654,7 @@ def command_install(args: argparse.Namespace) -> int:
         force_setup=args.force,
         verbose=args.verbose,
         omx_bin=args.omx_bin,
+        legacy_mode=resolve_legacy_mode(args.mode),
     )
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
@@ -598,25 +663,20 @@ def command_install(args: argparse.Namespace) -> int:
 def command_diff(args: argparse.Namespace) -> int:
     target = Path(args.target).resolve()
     metadata = load_metadata(target) if metadata_path(target).exists() else {}
-    mode = args.mode or metadata.get("mode")
-    if not mode:
-        raise SystemExit("Missing mode. Run install first or pass --mode.")
     scope = args.scope or metadata.get("scope", MANIFEST["default_scope"])
-    contract_path = resolve_contract_path(target, mode, args.project_contract_path or metadata.get("project_contract_path"))
+    contract_path = resolve_contract_path(target, args.project_contract_path or metadata.get("project_truth_path"))
     display_name = resolve_display_name(target, args.display_name or metadata.get("display_name"))
-    return diff_target(target, mode, scope, contract_path, display_name)
+    return diff_target(target, scope, contract_path, display_name)
 
 
 def command_upgrade(args: argparse.Namespace) -> int:
     target = Path(args.target).resolve()
     metadata = load_metadata(target)
-    mode = args.mode or metadata["mode"]
     scope = args.scope or metadata.get("scope", MANIFEST["default_scope"])
-    contract_path = resolve_contract_path(target, mode, args.project_contract_path or metadata["project_contract_path"])
+    contract_path = resolve_contract_path(target, args.project_contract_path or metadata.get("project_truth_path"))
     display_name = resolve_display_name(target, args.display_name or metadata.get("display_name"))
     result = install_or_refresh(
         target=target,
-        mode=mode,
         scope=scope,
         contract_path=contract_path,
         display_name=display_name,
@@ -624,6 +684,7 @@ def command_upgrade(args: argparse.Namespace) -> int:
         force_setup=args.force,
         verbose=args.verbose,
         omx_bin=args.omx_bin,
+        legacy_mode=resolve_legacy_mode(args.mode) or metadata.get("legacy_mode"),
     )
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
@@ -632,13 +693,11 @@ def command_upgrade(args: argparse.Namespace) -> int:
 def command_reconcile(args: argparse.Namespace) -> int:
     target = Path(args.target).resolve()
     metadata = load_metadata(target)
-    mode = metadata["mode"]
     scope = metadata.get("scope", MANIFEST["default_scope"])
-    contract_path = resolve_contract_path(target, mode, metadata["project_contract_path"])
+    contract_path = resolve_contract_path(target, metadata.get("project_truth_path"))
     display_name = resolve_display_name(target, metadata.get("display_name"))
     result = install_or_refresh(
         target=target,
-        mode=mode,
         scope=scope,
         contract_path=contract_path,
         display_name=display_name,
@@ -646,6 +705,7 @@ def command_reconcile(args: argparse.Namespace) -> int:
         force_setup=args.force,
         verbose=args.verbose,
         omx_bin=args.omx_bin,
+        legacy_mode=metadata.get("legacy_mode"),
     )
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
@@ -657,15 +717,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     def add_common(
         sp: argparse.ArgumentParser,
-        include_mode: bool = True,
         include_contract: bool = True,
         scope_default: str | None = None,
     ) -> None:
         sp.add_argument("--target", required=True, help="Target repository root")
-        if include_mode:
-            sp.add_argument("--mode", choices=sorted(MANIFEST["modes"].keys()), help="Contract mode")
+        sp.add_argument("--mode", choices=["runtime-service", "project-native"], help=argparse.SUPPRESS)
         if include_contract:
-            sp.add_argument("--project-contract-path", help="Override project truth contract path")
+            sp.add_argument("--project-contract-path", help="Override project truth contract path (default: contracts/project-truth/AGENTS.md)")
         sp.add_argument("--display-name", help="Display name for contract stubs")
         sp.add_argument("--scope", default=scope_default, choices=["project", "user"], help="OMX setup scope")
         sp.add_argument("--omx-bin", default="omx", help="omx executable to use")
@@ -682,12 +740,12 @@ def build_parser() -> argparse.ArgumentParser:
     diff.set_defaults(func=command_diff)
 
     upgrade = sub.add_parser("upgrade")
-    add_common(upgrade, include_mode=False)
+    add_common(upgrade)
     upgrade.add_argument("--run-omx-setup", action="store_true", help="Run omx setup again before applying upgraded baseline")
     upgrade.set_defaults(func=command_upgrade)
 
     reconcile = sub.add_parser("reconcile")
-    add_common(reconcile, include_mode=False, include_contract=False)
+    add_common(reconcile, include_contract=False)
     reconcile.add_argument("--run-omx-setup", action="store_true", help="Run omx setup again before reconciling")
     reconcile.set_defaults(func=command_reconcile)
 

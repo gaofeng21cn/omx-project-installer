@@ -1,10 +1,11 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "baseline_name": "agent-contract-baseline",
-  "baseline_version": "0.1.0",
+  "baseline_version": "0.2.0",
   "installer_skill": "omx-project-installer",
   "default_scope": "project",
   "managed_metadata_file": ".agent-contract-baseline.json",
+  "project_truth_path": "contracts/project-truth/AGENTS.md",
   "readme_markers": {
     "start": "<!-- AGENT-CONTRACT-BASELINE:START -->",
     "end": "<!-- AGENT-CONTRACT-BASELINE:END -->"
@@ -15,24 +16,16 @@
     "dev_hosts_readme": "templates/contracts/dev-hosts/README.md",
     "dev_hosts_omx_cli": "templates/contracts/dev-hosts/omx-cli.md",
     "dev_hosts_codex_app": "templates/contracts/dev-hosts/codex-app.md",
-    "runtime_service_contract": "templates/contracts/runtime-service/AGENTS.md",
-    "project_native_contract": "templates/contracts/project-native/AGENTS.md"
-  },
-  "modes": {
-    "runtime-service": {
-      "project_contract_path_template": "contracts/{repo_slug}-runtime-service/AGENTS.md",
-      "project_contract_label": "对外服务 Agent 合同",
-      "project_contract_kind": "runtime service contract"
-    },
-    "project-native": {
-      "project_contract_path_template": "contracts/{repo_slug}-repository/AGENTS.md",
-      "project_contract_label": "项目原生合同",
-      "project_contract_kind": "project-native repository contract"
-    }
+    "project_truth_contract": "templates/contracts/project-truth/AGENTS.md"
   },
   "gitignore_entries": [
     ".omx/",
     ".codex/"
+  ],
+  "legacy_project_contract_path_patterns": [
+    "contracts/*-runtime-service/AGENTS.md",
+    "contracts/*-repository/AGENTS.md",
+    "contracts/*/AGENTS.md"
   ],
   "config_inheritance": {
     "source_scope": "user",
