@@ -5,8 +5,8 @@
 它会把目标项目收束成统一结构：
 
 - 根 `AGENTS.md`
-- `contracts/dev-hosts/`
 - `contracts/project-truth/AGENTS.md`
+- `.codex/AGENTS.md`
 - `.omx/local/AGENTS.local.md` 约定
 
 并在项目级安装后自动做：
@@ -25,8 +25,8 @@
 
 也就是：
 
-- OMX 负责生成项目级骨架
-- baseline 安装器负责把合同分层、配置继承和兼容修复补齐
+- OMX 负责生成 project-scope 骨架
+- baseline 安装器负责把根 `AGENTS.md` 恢复成 App-native 入口，把 OMX 编排层放到 `.codex/AGENTS.md`，并把配置继承和兼容修复补齐
 
 ## 3. 它会把系统级 API key / token 复制到项目级吗？
 

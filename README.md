@@ -23,7 +23,7 @@
 
 目标不是替代 `omx setup`，而是补上它当前没有提供的整合层：
 
-- 将项目根 `AGENTS.md` 从单体文件收束成“薄入口 + 宿主适配层 + project-truth 合同 + 本机 overlay”
+- 将项目根 `AGENTS.md` 从单体文件收束成“App-native 根入口 + `.codex/AGENTS.md` OMX 编排层 + project-truth 合同 + 本机 overlay”
 - 在项目级安装后，把系统级 `~/.codex/config.toml` 中的 provider / model / reasoning 连接真相回灌到项目级 `.codex/config.toml`
 - 修复项目级安装后遗留的旧 skill alias 兼容问题
 - 记录 baseline 版本与受管文件，支持后续 `diff / upgrade / reconcile`
@@ -32,9 +32,9 @@
 
 每个目标项目被拆成四层：
 
-1. 仓库开发入口合同：根 `AGENTS.md`
-2. 宿主适配层：`contracts/dev-hosts/`
-3. 项目真相合同：`contracts/project-truth/AGENTS.md`
+1. 项目根入口合同：根 `AGENTS.md`
+2. 项目真相合同：`contracts/project-truth/AGENTS.md`
+3. OMX project-scope 编排层：`.codex/AGENTS.md`
 4. 本机私有 overlay：`.omx/local/AGENTS.local.md`
 
 项目差异不再体现在安装模式上，而体现在 `contracts/project-truth/AGENTS.md` 的具体内容里。
@@ -48,7 +48,7 @@
 - `baseline.manifest.json`
   - 基线版本、受管文件、统一 project-truth 路径、config 继承规则、legacy alias 修复规则
 - `templates/`
-  - 通用模板
+  - 根 `AGENTS.md` / `.codex/AGENTS.md` / project-truth 模板
 - `examples/`
   - 从现有项目抽出的参考快照
 - `skills/omx-project-installer/`
@@ -60,7 +60,7 @@
 
 1. 在目标项目下运行 `omx setup --scope project`
 2. 备份已有根 `AGENTS.md`
-3. 落通用根入口、宿主适配层、README 分层说明与 `contracts/project-truth/AGENTS.md`
+3. 落项目根入口、`.codex/AGENTS.md` OMX 编排层、README 分层说明与 `contracts/project-truth/AGENTS.md`
 4. 把系统级 provider / model / reasoning 配置回灌到项目级 `.codex/config.toml`
 5. 修复 legacy skill alias
 6. 写入 `.agent-contract-baseline.json`
@@ -80,8 +80,8 @@
 
 也就是：
 
-- OMX 负责生成本地骨架
-- baseline 安装器负责修复兼容性、恢复项目真相层，并把系统级模型配置重新压回项目级
+- OMX 负责生成 project-scope 本地骨架
+- baseline 安装器负责把项目根 `AGENTS.md` 恢复为 App-native 入口、把 OMX 编排层落到 `.codex/AGENTS.md`、恢复项目真相层，并把系统级模型配置重新压回项目级
 
 ## 当前状态
 

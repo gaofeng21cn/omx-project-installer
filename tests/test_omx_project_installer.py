@@ -50,6 +50,29 @@ class PreserveExistingRootAgentsTests(unittest.TestCase):
             )
 
 
+class ContractLayerWriteTests(unittest.TestCase):
+    def test_apply_root_and_contracts_writes_root_and_omx_layers(self):
+        installer = load_module()
+        with TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir)
+            contract_path = target / "contracts" / "project-truth" / "AGENTS.md"
+
+            result = installer.apply_root_and_contracts(target, contract_path, "Demo Project")
+
+            self.assertTrue(result["project_contract_written"])
+            self.assertTrue((target / "AGENTS.md").exists())
+            self.assertTrue((target / ".codex" / "AGENTS.md").exists())
+            self.assertTrue(contract_path.exists())
+
+            root_content = (target / "AGENTS.md").read_text(encoding="utf-8")
+            omx_content = (target / ".codex" / "AGENTS.md").read_text(encoding="utf-8")
+
+            self.assertNotIn("oh-my-codex", root_content)
+            self.assertIn("project truth contract lives at `contracts/project-truth/AGENTS.md`", root_content)
+            self.assertIn("oh-my-codex", omx_content)
+            self.assertIn("This file lives at `.codex/AGENTS.md`", omx_content)
+
+
 class ConfigInheritanceTests(unittest.TestCase):
     def test_reconcile_project_config_removes_context_limits_missing_from_user_config(self):
         installer = load_module()
@@ -116,6 +139,65 @@ class ReadmeSectionTests(unittest.TestCase):
 
             content = readme.read_text(encoding="utf-8")
             self.assertEqual(content.count("## Agent 合同分层"), 1)
+
+
+class LegacyCleanupTests(unittest.TestCase):
+    def test_reconcile_removes_legacy_dev_hosts_files(self):
+        installer = load_module()
+        with TemporaryDirectory() as home_tmpdir, TemporaryDirectory() as repo_tmpdir:
+            home_root = Path(home_tmpdir)
+            user_codex = home_root / ".codex"
+            user_codex.mkdir(parents=True, exist_ok=True)
+            (user_codex / "config.toml").write_text(
+                'model_provider = "gflab"\n'
+                'model = "gpt-5.4"\n'
+                'model_reasoning_effort = "xhigh"\n'
+                '\n'
+                '[model_providers.gflab]\n'
+                'base_url = "https://example.invalid/v1"\n',
+                encoding="utf-8",
+            )
+
+            repo_root = Path(repo_tmpdir)
+            (repo_root / "README.md").write_text("# Demo\n", encoding="utf-8")
+            (repo_root / "contracts" / "project-truth").mkdir(parents=True, exist_ok=True)
+            (repo_root / "contracts" / "project-truth" / "AGENTS.md").write_text("# truth\n", encoding="utf-8")
+            legacy_dir = repo_root / "contracts" / "dev-hosts"
+            legacy_dir.mkdir(parents=True, exist_ok=True)
+            (legacy_dir / "README.md").write_text("old\n", encoding="utf-8")
+            (legacy_dir / "omx-cli.md").write_text("old\n", encoding="utf-8")
+            (legacy_dir / "codex-app.md").write_text("old\n", encoding="utf-8")
+
+            project_codex = repo_root / ".codex"
+            project_codex.mkdir(parents=True, exist_ok=True)
+            (project_codex / "config.toml").write_text(
+                'model_provider = "gflab"\n'
+                'model = "gpt-5.4"\n'
+                'model_reasoning_effort = "high"\n'
+                '\n'
+                '[model_providers.gflab]\n'
+                'base_url = "https://placeholder.invalid/v1"\n',
+                encoding="utf-8",
+            )
+            (project_codex / "skills" / "ralph").mkdir(parents=True, exist_ok=True)
+            (project_codex / "skills" / "team").mkdir(parents=True, exist_ok=True)
+            (project_codex / "skills" / "ultrawork").mkdir(parents=True, exist_ok=True)
+
+            with mock.patch.object(installer.Path, "home", return_value=home_root):
+                installer.install_or_refresh(
+                    target=repo_root,
+                    scope="project",
+                    contract_path=repo_root / "contracts" / "project-truth" / "AGENTS.md",
+                    display_name="Demo",
+                    run_setup=False,
+                    force_setup=False,
+                    verbose=False,
+                    omx_bin="omx",
+                )
+
+            self.assertFalse((legacy_dir / "README.md").exists())
+            self.assertFalse((legacy_dir / "omx-cli.md").exists())
+            self.assertFalse((legacy_dir / "codex-app.md").exists())
 
 
 if __name__ == "__main__":

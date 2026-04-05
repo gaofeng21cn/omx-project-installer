@@ -53,6 +53,10 @@ def default_contract_path(target: Path) -> Path:
     return target / project_truth_relpath()
 
 
+def omx_agents_path(target: Path) -> Path:
+    return target / ".codex" / "AGENTS.md"
+
+
 def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
@@ -387,6 +391,26 @@ def migrate_project_truth_contract(
     return result
 
 
+def cleanup_legacy_paths(target: Path) -> dict[str, Any]:
+    removed: list[str] = []
+    for rel in MANIFEST.get("legacy_cleanup_paths", []):
+        path = target / rel
+        if path.exists() or path.is_symlink():
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+            removed.append(rel)
+            parent = path.parent
+            while parent != target and parent.exists():
+                try:
+                    parent.rmdir()
+                except OSError:
+                    break
+                parent = parent.parent
+    return {"removed": removed}
+
+
 def apply_root_and_contracts(
     target: Path,
     contract_path: Path,
@@ -395,18 +419,7 @@ def apply_root_and_contracts(
 ) -> dict[str, Any]:
     replacements = render_replacements(target, contract_path, display_name)
     write_text(target / "AGENTS.md", render_template(template_path("root_agents"), replacements))
-    write_text(
-        target / "contracts" / "dev-hosts" / "README.md",
-        render_template(template_path("dev_hosts_readme"), replacements),
-    )
-    write_text(
-        target / "contracts" / "dev-hosts" / "omx-cli.md",
-        render_template(template_path("dev_hosts_omx_cli"), replacements),
-    )
-    write_text(
-        target / "contracts" / "dev-hosts" / "codex-app.md",
-        render_template(template_path("dev_hosts_codex_app"), replacements),
-    )
+    write_text(omx_agents_path(target), render_template(template_path("omx_project_agents"), replacements))
     if force_contract or not contract_path.exists():
         write_text(contract_path, render_template(template_path("project_truth_contract"), replacements))
         return {"project_contract_written": True}
@@ -478,10 +491,8 @@ def managed_files(target: Path, contract_path: Path) -> list[str]:
         "AGENTS.md",
         "README.md",
         ".gitignore",
-        "contracts/dev-hosts/README.md",
-        "contracts/dev-hosts/omx-cli.md",
-        "contracts/dev-hosts/codex-app.md",
         contract_path.relative_to(target).as_posix(),
+        omx_agents_path(target).relative_to(target).as_posix(),
     ]
 
 
@@ -535,6 +546,7 @@ def install_or_refresh(
     if run_setup:
         run_omx_setup(target, scope, force_setup, verbose, omx_bin)
     migration = migrate_project_truth_contract(target, contract_path, metadata)
+    cleanup = cleanup_legacy_paths(target)
     ensured_ignore = ensure_gitignore_entries(target / ".gitignore", MANIFEST["gitignore_entries"])
     applied = apply_root_and_contracts(target, contract_path, display_name)
     readme_updated = apply_readme_section(target, contract_path)
@@ -553,6 +565,7 @@ def install_or_refresh(
             "legacy_project_contract_path": metadata.get("project_contract_path") if metadata else None,
             "preserved_existing_root": preserved,
             "project_truth_migration": migration,
+            "legacy_cleanup": cleanup,
             "gitignore_updated": ensured_ignore,
             "readme_updated": readme_updated,
             "config_reconcile": config_result,
@@ -564,8 +577,10 @@ def install_or_refresh(
         "contract_layout": "single-project-truth",
         "scope": scope,
         "project_truth_path": str(contract_path),
+        "omx_agents_path": str(omx_agents_path(target)),
         "preserved_existing_root": preserved,
         "project_truth_migration": migration,
+        "legacy_cleanup": cleanup,
         "gitignore_updated": ensured_ignore,
         "readme_updated": readme_updated,
         "project_contract_written": applied["project_contract_written"],
@@ -576,6 +591,10 @@ def install_or_refresh(
 
 def expected_root(target: Path, contract_path: Path, display_name: str) -> str:
     return render_template(template_path("root_agents"), render_replacements(target, contract_path, display_name))
+
+
+def expected_omx_agents(target: Path, contract_path: Path, display_name: str) -> str:
+    return render_template(template_path("omx_project_agents"), render_replacements(target, contract_path, display_name))
 
 
 def expected_readme_section(target: Path, contract_path: Path) -> str:
@@ -599,21 +618,16 @@ def diff_target(target: Path, scope: str, contract_path: Path, display_name: str
         issues += 1
     else:
         checks.append("AGENTS.md: ok")
-    for rel, template_key in [
-        ("contracts/dev-hosts/README.md", "dev_hosts_readme"),
-        ("contracts/dev-hosts/omx-cli.md", "dev_hosts_omx_cli"),
-        ("contracts/dev-hosts/codex-app.md", "dev_hosts_codex_app"),
-    ]:
-        path = target / rel
-        rendered = render_template(template_path(template_key), render_replacements(target, contract_path, display_name))
-        if not path.exists():
-            checks.append(f"{rel}: missing")
-            issues += 1
-        elif read_text(path) != rendered:
-            checks.append(f"{rel}: drift")
-            issues += 1
-        else:
-            checks.append(f"{rel}: ok")
+    omx_path = omx_agents_path(target)
+    omx_expected = expected_omx_agents(target, contract_path, display_name)
+    if not omx_path.exists():
+        checks.append(".codex/AGENTS.md: missing")
+        issues += 1
+    elif read_text(omx_path) != omx_expected:
+        checks.append(".codex/AGENTS.md: drift")
+        issues += 1
+    else:
+        checks.append(".codex/AGENTS.md: ok")
     readme_path = target / "README.md"
     if readme_path.exists():
         content = read_text(readme_path)

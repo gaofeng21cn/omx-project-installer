@@ -7,7 +7,7 @@ description: Install or refresh oh-my-codex in a specific project directory whil
 
 ## Overview
 
-Use this skill when you want to install or refresh OMX for a specific repository without hand-managing `AGENTS.md`, host adapter layering, `contracts/project-truth/AGENTS.md`, provider config inheritance, or legacy project-scope skill alias repair.
+Use this skill when you want to install or refresh OMX for a specific repository without hand-managing the split between root `AGENTS.md`, `.codex/AGENTS.md`, `contracts/project-truth/AGENTS.md`, provider config inheritance, or legacy project-scope skill alias repair.
 
 This skill uses the `agent-contract-baseline` repository as the source of truth, then applies a post-setup reconciliation pass on top of `omx setup`.
 
@@ -35,7 +35,7 @@ python skills/omx-project-installer/scripts/omx_project_installer.py reconcile -
 1. Resolve target project and current contract layout
 2. Run `omx setup --scope project` unless explicitly skipped
 3. Preserve any pre-existing root `AGENTS.md`
-4. Apply thin root contract, host adapters, README layering section, and `contracts/project-truth/AGENTS.md`
+4. Apply the App-native root contract, `.codex/AGENTS.md` OMX layer, README layering section, and `contracts/project-truth/AGENTS.md`
 5. Reconcile project `.codex/config.toml` with system-level provider and model settings
 6. Repair legacy project-scope skill aliases
 7. Write baseline metadata for later `diff`, `upgrade`, and `reconcile`
@@ -45,7 +45,7 @@ python skills/omx-project-installer/scripts/omx_project_installer.py reconcile -
 The installer always converges on one structure:
 
 - root `AGENTS.md`
-- `contracts/dev-hosts/`
+- `.codex/AGENTS.md`
 - `contracts/project-truth/AGENTS.md`
 - `.omx/local/AGENTS.local.md`
 
@@ -53,8 +53,8 @@ Repository differences live inside the content of `contracts/project-truth/AGENT
 
 ## Compatibility Guarantees
 
-- Root `AGENTS.md` becomes a thin, reproducible entry file
-- `contracts/dev-hosts/` becomes the explicit host adapter layer
+- Root `AGENTS.md` becomes the App-native project entry file
+- `.codex/AGENTS.md` becomes the OMX project-scope orchestration layer
 - `contracts/project-truth/AGENTS.md` becomes the single project authority path
 - System-level provider configuration is copied back into project-level `.codex/config.toml`
 - Known legacy alias names are repaired after project-scope setup
