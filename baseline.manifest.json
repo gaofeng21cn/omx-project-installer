@@ -35,6 +35,10 @@
       "model",
       "model_reasoning_effort"
     ],
+    "remove_if_absent_root_keys": [
+      "model_context_window",
+      "model_auto_compact_token_limit"
+    ],
     "table_keys": [
       "model_providers"
     ]

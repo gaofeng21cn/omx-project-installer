@@ -176,6 +176,11 @@ def reconcile_project_config(target: Path) -> dict[str, Any]:
                 project_doc[key] = value
                 changed = True
                 result["keys_synced"].append(key)
+    for key in inheritance.get("remove_if_absent_root_keys", []):
+        if key not in user_doc and key in project_doc:
+            del project_doc[key]
+            changed = True
+            result["keys_synced"].append(f"{key}:removed")
     for table_key in inheritance["table_keys"]:
         if table_key in user_doc:
             value = deepcopy_toml_item(user_doc[table_key])
@@ -214,6 +219,10 @@ def inspect_project_config_inheritance(target: Path) -> dict[str, Any]:
             if key not in project_doc or normalize_toml_value(project_doc[key]) != normalize_toml_value(user_doc[key]):
                 result["in_sync"] = False
                 result["drifted_keys"].append(key)
+    for key in inheritance.get("remove_if_absent_root_keys", []):
+        if key not in user_doc and key in project_doc:
+            result["in_sync"] = False
+            result["drifted_keys"].append(f"{key}:should-be-absent")
     for table_key in inheritance["table_keys"]:
         if table_key in user_doc:
             if table_key not in project_doc or normalize_toml_value(project_doc[table_key]) != normalize_toml_value(user_doc[table_key]):
@@ -408,11 +417,27 @@ def apply_readme_section(target: Path, contract_path: Path) -> bool:
     readme_path = target / "README.md"
     if not readme_path.exists():
         return False
+    current = read_text(readme_path)
     replacements = {"PROJECT_CONTRACT_PATH": contract_path.relative_to(target).as_posix()}
-    rendered = render_template(template_path("readme_section"), replacements)
+    rendered = render_template(template_path("readme_section"), replacements).strip()
     markers = MANIFEST["readme_markers"]
-    updated = upsert_marked_section(read_text(readme_path), rendered, markers["start"], markers["end"])
-    if updated != read_text(readme_path):
+    block_pattern = re.compile(re.escape(markers["start"]) + r".*?" + re.escape(markers["end"]), re.DOTALL)
+    if block_pattern.search(current):
+        updated = block_pattern.sub(rendered, current, count=1)
+    elif "## Agent 合同分层" in current:
+        heading_pattern = re.compile(r"^## Agent 合同分层\s*$", re.MULTILINE)
+        match = heading_pattern.search(current)
+        if not match:
+            updated = upsert_marked_section(current, "## Agent 合同分层\n\n" + rendered, markers["start"], markers["end"])
+        else:
+            insert_at = match.end()
+            tail = current[insert_at:].lstrip("\n")
+            updated = current[:insert_at] + "\n\n" + rendered + "\n\n" + tail
+    else:
+        updated = upsert_marked_section(current, "## Agent 合同分层\n\n" + rendered, markers["start"], markers["end"])
+    updated = re.sub(r"(## Agent 合同分层\s*\n\s*){2,}", "## Agent 合同分层\n\n", updated)
+    updated = updated.rstrip() + "\n"
+    if updated != current:
         write_text(readme_path, updated)
         return True
     return False
@@ -558,10 +583,7 @@ def expected_readme_section(target: Path, contract_path: Path) -> str:
         template_path("readme_section"),
         {"PROJECT_CONTRACT_PATH": contract_path.relative_to(target).as_posix()},
     ).strip()
-    markers = MANIFEST["readme_markers"]
-    pattern = re.compile(re.escape(markers["start"]) + r".*?" + re.escape(markers["end"]), re.DOTALL)
-    match = pattern.search(rendered)
-    return match.group(0).strip() if match else rendered
+    return rendered
 
 
 def diff_target(target: Path, scope: str, contract_path: Path, display_name: str) -> int:
