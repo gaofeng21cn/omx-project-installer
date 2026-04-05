@@ -35,10 +35,12 @@ python skills/omx-project-installer/scripts/omx_project_installer.py reconcile -
 1. Resolve target project and current contract layout
 2. Run `omx setup --scope project` unless explicitly skipped
 3. Preserve any pre-existing root `AGENTS.md`
-4. Apply the App-native root contract, `.codex/AGENTS.md` OMX layer, README layering section, and `contracts/project-truth/AGENTS.md`
+4. Apply the App-native root contract, `.codex/AGENTS.md` OMX layer, and `contracts/project-truth/AGENTS.md`
 5. Reconcile project `.codex/config.toml` with system-level provider and model settings
 6. Repair legacy project-scope skill aliases
 7. Write baseline metadata for later `diff`, `upgrade`, and `reconcile`
+
+Public `README` surfaces remain human-owned and are not baseline-managed.
 
 ## Project Truth
 

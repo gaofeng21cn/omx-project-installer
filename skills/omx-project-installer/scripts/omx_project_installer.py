@@ -427,32 +427,6 @@ def apply_root_and_contracts(
 
 
 def apply_readme_section(target: Path, contract_path: Path) -> bool:
-    readme_path = target / "README.md"
-    if not readme_path.exists():
-        return False
-    current = read_text(readme_path)
-    replacements = {"PROJECT_CONTRACT_PATH": contract_path.relative_to(target).as_posix()}
-    rendered = render_template(template_path("readme_section"), replacements).strip()
-    markers = MANIFEST["readme_markers"]
-    block_pattern = re.compile(re.escape(markers["start"]) + r".*?" + re.escape(markers["end"]), re.DOTALL)
-    if block_pattern.search(current):
-        updated = block_pattern.sub(rendered, current, count=1)
-    elif "## Agent 合同分层" in current:
-        heading_pattern = re.compile(r"^## Agent 合同分层\s*$", re.MULTILINE)
-        match = heading_pattern.search(current)
-        if not match:
-            updated = upsert_marked_section(current, "## Agent 合同分层\n\n" + rendered, markers["start"], markers["end"])
-        else:
-            insert_at = match.end()
-            tail = current[insert_at:].lstrip("\n")
-            updated = current[:insert_at] + "\n\n" + rendered + "\n\n" + tail
-    else:
-        updated = upsert_marked_section(current, "## Agent 合同分层\n\n" + rendered, markers["start"], markers["end"])
-    updated = re.sub(r"(## Agent 合同分层\s*\n\s*){2,}", "## Agent 合同分层\n\n", updated)
-    updated = updated.rstrip() + "\n"
-    if updated != current:
-        write_text(readme_path, updated)
-        return True
     return False
 
 
@@ -489,7 +463,6 @@ def preserve_existing_root_agents(target: Path, contract_path: Path) -> dict[str
 def managed_files(target: Path, contract_path: Path) -> list[str]:
     return [
         "AGENTS.md",
-        "README.md",
         ".gitignore",
         contract_path.relative_to(target).as_posix(),
         omx_agents_path(target).relative_to(target).as_posix(),
@@ -549,7 +522,6 @@ def install_or_refresh(
     cleanup = cleanup_legacy_paths(target)
     ensured_ignore = ensure_gitignore_entries(target / ".gitignore", MANIFEST["gitignore_entries"])
     applied = apply_root_and_contracts(target, contract_path, display_name)
-    readme_updated = apply_readme_section(target, contract_path)
     config_result = {"applied": False}
     alias_result = {"repaired": [], "skipped": []}
     if scope == "project":
@@ -567,7 +539,6 @@ def install_or_refresh(
             "project_truth_migration": migration,
             "legacy_cleanup": cleanup,
             "gitignore_updated": ensured_ignore,
-            "readme_updated": readme_updated,
             "config_reconcile": config_result,
             "legacy_alias_repair": alias_result,
         },
@@ -582,7 +553,6 @@ def install_or_refresh(
         "project_truth_migration": migration,
         "legacy_cleanup": cleanup,
         "gitignore_updated": ensured_ignore,
-        "readme_updated": readme_updated,
         "project_contract_written": applied["project_contract_written"],
         "config_reconcile": config_result,
         "legacy_alias_repair": alias_result,
@@ -595,14 +565,6 @@ def expected_root(target: Path, contract_path: Path, display_name: str) -> str:
 
 def expected_omx_agents(target: Path, contract_path: Path, display_name: str) -> str:
     return render_template(template_path("omx_project_agents"), render_replacements(target, contract_path, display_name))
-
-
-def expected_readme_section(target: Path, contract_path: Path) -> str:
-    rendered = render_template(
-        template_path("readme_section"),
-        {"PROJECT_CONTRACT_PATH": contract_path.relative_to(target).as_posix()},
-    ).strip()
-    return rendered
 
 
 def diff_target(target: Path, scope: str, contract_path: Path, display_name: str) -> int:
@@ -628,22 +590,7 @@ def diff_target(target: Path, scope: str, contract_path: Path, display_name: str
         issues += 1
     else:
         checks.append(".codex/AGENTS.md: ok")
-    readme_path = target / "README.md"
-    if readme_path.exists():
-        content = read_text(readme_path)
-        markers = MANIFEST["readme_markers"]
-        pattern = re.compile(re.escape(markers["start"]) + r".*?" + re.escape(markers["end"]), re.DOTALL)
-        match = pattern.search(content)
-        if not match:
-            checks.append("README managed section: missing")
-            issues += 1
-        elif match.group(0).strip() != expected_readme_section(target, contract_path):
-            checks.append("README managed section: drift")
-            issues += 1
-        else:
-            checks.append("README managed section: ok")
-    else:
-        checks.append("README managed section: skipped (README missing)")
+    checks.append("README public surface: unmanaged by baseline")
     gitignore_path = target / ".gitignore"
     missing_entries = [entry for entry in MANIFEST["gitignore_entries"] if not gitignore_path.exists() or entry not in read_text(gitignore_path).splitlines()]
     if missing_entries:

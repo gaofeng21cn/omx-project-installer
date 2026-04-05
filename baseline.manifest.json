@@ -6,14 +6,9 @@
   "default_scope": "project",
   "managed_metadata_file": ".agent-contract-baseline.json",
   "project_truth_path": "contracts/project-truth/AGENTS.md",
-  "readme_markers": {
-    "start": "<!-- AGENT-CONTRACT-BASELINE:START -->",
-    "end": "<!-- AGENT-CONTRACT-BASELINE:END -->"
-  },
   "templates": {
     "root_agents": "templates/AGENTS.root.template.md",
     "omx_project_agents": "templates/AGENTS.omx-project.template.md",
-    "readme_section": "templates/README.agent-layering.section.md",
     "project_truth_contract": "templates/contracts/project-truth/AGENTS.md"
   },
   "gitignore_entries": [

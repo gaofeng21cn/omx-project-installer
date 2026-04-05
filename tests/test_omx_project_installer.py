@@ -118,27 +118,51 @@ class ConfigInheritanceTests(unittest.TestCase):
 
 
 class ReadmeSectionTests(unittest.TestCase):
-    def test_apply_readme_section_does_not_duplicate_heading_when_markers_exist(self):
+    def test_apply_readme_section_leaves_public_readme_untouched(self):
         installer = load_module()
         with TemporaryDirectory() as tmpdir:
             target = Path(tmpdir)
             readme = target / "README.md"
-            readme.write_text(
-                "# Demo\n\n"
-                "## Agent 合同分层\n\n"
-                "<!-- AGENT-CONTRACT-BASELINE:START -->\n"
-                "- old\n"
-                "<!-- AGENT-CONTRACT-BASELINE:END -->\n",
-                encoding="utf-8",
-            )
+            original = "# Demo\n\nPublic README stays human-owned.\n"
+            readme.write_text(original, encoding="utf-8")
             contract_path = target / "contracts" / "project-truth" / "AGENTS.md"
             contract_path.parent.mkdir(parents=True, exist_ok=True)
             contract_path.write_text("# truth\n", encoding="utf-8")
 
-            installer.apply_readme_section(target, contract_path)
+            changed = installer.apply_readme_section(target, contract_path)
 
-            content = readme.read_text(encoding="utf-8")
-            self.assertEqual(content.count("## Agent 合同分层"), 1)
+            self.assertFalse(changed)
+            self.assertEqual(readme.read_text(encoding="utf-8"), original)
+
+    def test_diff_target_does_not_require_managed_readme_section(self):
+        installer = load_module()
+        with TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir)
+            readme = target / "README.md"
+            readme.write_text("# Demo\n\nHuman-facing public docs.\n", encoding="utf-8")
+            (target / ".gitignore").write_text(".omx/\n.codex/\n", encoding="utf-8")
+            contract_path = target / "contracts" / "project-truth" / "AGENTS.md"
+
+            installer.apply_root_and_contracts(target, contract_path, "Demo Project")
+            changed = installer.apply_readme_section(target, contract_path)
+            result = installer.diff_target(target, "user", contract_path, "Demo Project")
+
+            self.assertFalse(changed)
+            self.assertEqual(result, 0)
+
+
+class MetadataSurfaceTests(unittest.TestCase):
+    def test_managed_files_excludes_public_readme(self):
+        installer = load_module()
+        with TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir)
+            contract_path = target / "contracts" / "project-truth" / "AGENTS.md"
+            contract_path.parent.mkdir(parents=True, exist_ok=True)
+            contract_path.write_text("# truth\n", encoding="utf-8")
+
+            managed = installer.managed_files(target, contract_path)
+
+            self.assertNotIn("README.md", managed)
 
 
 class LegacyCleanupTests(unittest.TestCase):

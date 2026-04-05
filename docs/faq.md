@@ -31,6 +31,7 @@
 
 - OMX 负责生成 project-scope 骨架
 - baseline 安装器负责把根 `AGENTS.md` 恢复成 App-native 入口，把 OMX 编排层放到 `.codex/AGENTS.md`，并把配置继承和兼容修复补齐
+- baseline 安装器不托管公开 README；README 的语言、叙事和外部呈现由项目自己维护
 
 ## 3. 它会把系统级 API key / token 复制到项目级吗？
 

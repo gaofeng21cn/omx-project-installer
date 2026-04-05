@@ -60,10 +60,12 @@
 
 1. 在目标项目下运行 `omx setup --scope project`
 2. 备份已有根 `AGENTS.md`
-3. 落项目根入口、`.codex/AGENTS.md` OMX 编排层、README 分层说明与 `contracts/project-truth/AGENTS.md`
+3. 落项目根入口、`.codex/AGENTS.md` OMX 编排层与 `contracts/project-truth/AGENTS.md`
 4. 把系统级 provider / model / reasoning 配置回灌到项目级 `.codex/config.toml`
 5. 修复 legacy skill alias
 6. 写入 `.agent-contract-baseline.json`
+
+公开 README 不属于 baseline 受管面，其语言、叙事和对外说明必须由目标项目自行维护。
 
 ## 与 OMX 当前行为的兼容关系
 
@@ -82,6 +84,7 @@
 
 - OMX 负责生成 project-scope 本地骨架
 - baseline 安装器负责把项目根 `AGENTS.md` 恢复为 App-native 入口、把 OMX 编排层落到 `.codex/AGENTS.md`、恢复项目真相层，并把系统级模型配置重新压回项目级
+- baseline 安装器不托管公开 README，也不会根据固定模板改写 README 的语言或公开叙事
 
 ## 当前状态
 
