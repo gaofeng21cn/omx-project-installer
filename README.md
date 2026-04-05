@@ -1,21 +1,21 @@
-# Agent Contract Baseline
+# OMX Project Installer
 
-`agent-contract-baseline` 提供一套可复用的仓库级 Agent 合同基线，以及一个兼容性感知的 OMX 项目安装器 skill。
+`omx-project-installer` 是一个兼容性感知的 OMX project-scope 安装器。它的职责是在 upstream 正式吸收并发布相关修复之前，让 OMX 安装进具体项目目录时不破坏项目自己的根 `AGENTS.md`、Codex App 体验和系统级模型配置。
 
 > **Quick Start**
 >
-> 1. 安装 baseline：
+> 1. 安装工具仓库：
 >
 > ```bash
-> git clone https://github.com/gaofeng21cn/agent-contract-baseline.git
-> cd agent-contract-baseline
+> git clone https://github.com/gaofeng21cn/omx-project-installer.git
+> cd omx-project-installer
 > ./install.sh
 > ```
 >
 > 2. 在目标项目目录里直接对 Codex 说：
 >
 > ```text
-> 请安装并使用 https://github.com/gaofeng21cn/agent-contract-baseline ，然后在当前项目目录使用 $omx-project-installer，把当前项目完成 OMX project-scope 安装与合同分层收口。
+> 请安装并使用 https://github.com/gaofeng21cn/omx-project-installer ，然后在当前项目目录使用 $omx-project-installer，把当前项目完成 OMX project-scope 安装与合同分层收口。
 > ```
 >
 > 3. 常见问题见：
@@ -90,15 +90,15 @@
 - `redcube-ai`
 - `med-autoscience`
 
-这两个项目是 baseline 的种子样本，而不是模板本身。
+这两个项目是当前 installer 设计的种子样本，而不是模板本身。
 
 ## 一键安装
 
 在新机器上：
 
 ```bash
-git clone https://github.com/gaofeng21cn/agent-contract-baseline.git
-cd agent-contract-baseline
+git clone https://github.com/gaofeng21cn/omx-project-installer.git
+cd omx-project-installer
 ./install.sh
 ```
 
@@ -119,7 +119,7 @@ python install.py
 如果你是要把一条指令直接转发给别人的 Codex，推荐使用下面这句：
 
 ```text
-请安装并使用 https://github.com/gaofeng21cn/agent-contract-baseline ，然后在当前项目目录使用 $omx-project-installer，把当前项目完成 OMX project-scope 安装与合同分层收口。
+请安装并使用 https://github.com/gaofeng21cn/omx-project-installer ，然后在当前项目目录使用 $omx-project-installer，把当前项目完成 OMX project-scope 安装与合同分层收口。
 ```
 
 如果对方已经装过这个 skill，更短的版本就是：
@@ -132,3 +132,13 @@ python install.py
 
 - 常见问题与行为边界：
   [`docs/faq.md`](docs/faq.md)
+
+## 定位说明
+
+对外你只需要安装并使用一个 skill：
+
+- `$omx-project-installer`
+
+模板、examples、测试、FAQ 和安装脚本都只是这个 skill 的实现与验证资产。
+
+它可以被别的仓库索引或引用，但源码真相源继续保留在这个独立仓库中。

@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "baseline_name": "agent-contract-baseline",
+  "baseline_name": "omx-project-installer",
   "baseline_version": "0.2.0",
   "installer_skill": "omx-project-installer",
   "default_scope": "project",

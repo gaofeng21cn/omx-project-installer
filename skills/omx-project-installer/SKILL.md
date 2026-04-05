@@ -9,7 +9,7 @@ description: Install or refresh oh-my-codex in a specific project directory whil
 
 Use this skill when you want to install or refresh OMX for a specific repository without hand-managing the split between root `AGENTS.md`, `.codex/AGENTS.md`, `contracts/project-truth/AGENTS.md`, provider config inheritance, or legacy project-scope skill alias repair.
 
-This skill uses the `agent-contract-baseline` repository as the source of truth, then applies a post-setup reconciliation pass on top of `omx setup`.
+This skill uses the `omx-project-installer` repository as the source of truth, then applies a post-setup reconciliation pass on top of `omx setup`.
 
 ## When To Use
 

@@ -1,5 +1,9 @@
 # FAQ
 
+本仓库的公开名字是 `omx-project-installer`。
+
+它的核心职责是提供一个高兼容性的 OMX project-scope 安装器。
+
 ## 1. 这个 baseline 到底会做什么？
 
 它会把目标项目收束成统一结构：
@@ -87,7 +91,7 @@ python skills/omx-project-installer/scripts/omx_project_installer.py reconcile -
 如果对方还没装 skill：
 
 ```text
-请安装并使用 https://github.com/gaofeng21cn/agent-contract-baseline ，然后在当前项目目录使用 $omx-project-installer，把当前项目完成 OMX project-scope 安装与合同分层收口。
+请安装并使用 https://github.com/gaofeng21cn/omx-project-installer ，然后在当前项目目录使用 $omx-project-installer，把当前项目完成 OMX project-scope 安装与合同分层收口。
 ```
 
 如果对方已经装过 skill：
@@ -127,3 +131,18 @@ python skills/omx-project-installer/scripts/omx_project_installer.py reconcile -
 3. runtime-only keyword gating 已进入正式模板
 
 到那时，才适合在 baseline 安装器里降级或删除这部分兼容修复。
+
+## 10. 既然仓库已经改名，为什么 metadata 文件还是 `.agent-contract-baseline.json`？
+
+这是为了兼容已经落地到项目里的旧安装结果。
+
+当前仓库已经对外改名为 `omx-project-installer`，但项目内 metadata 文件名暂时保留为：
+
+- `.agent-contract-baseline.json`
+
+这样可以避免对已经接管过的项目再做一次不必要的 metadata 文件迁移。
+
+也就是说：
+
+- **公开品牌名**：`omx-project-installer`
+- **项目内历史兼容文件名**：`.agent-contract-baseline.json`
