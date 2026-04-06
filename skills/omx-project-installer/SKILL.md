@@ -7,7 +7,7 @@ description: Install or refresh oh-my-codex in a specific project directory whil
 
 ## Overview
 
-Use this skill when you want to install or refresh OMX for a specific repository without hand-managing the split between root `AGENTS.md`, `.codex/AGENTS.md`, `contracts/project-truth/AGENTS.md`, provider config inheritance, or legacy project-scope skill alias repair.
+Use this skill when you want to install or refresh OMX for a specific repository without hand-managing the split between root `AGENTS.md`, `.codex/AGENTS.md`, `contracts/project-truth/AGENTS.md`, provider config inheritance, legacy project-scope skill alias repair, or the project-level continuous planning scaffold for `Codex App + OMX`.
 
 This skill uses the `omx-project-installer` repository as the source of truth, then applies a post-setup reconciliation pass on top of `omx setup`.
 
@@ -18,6 +18,8 @@ This skill uses the `omx-project-installer` repository as the source of truth, t
 - Adopt a project that already has a root `AGENTS.md` and preserve it before switching to a thin root entry
 - Compare a project against the current baseline version
 - Upgrade managed contract layers without overwriting the project truth contract
+- Seed a stable `.omx/context + .omx/plans + .omx/reports` routing surface so Codex/OMX know where long-horizon planning should live
+- Apply an optional `program pack` when a project should start with a domain-specific long-horizon scaffold
 
 ## Commands
 
@@ -25,6 +27,7 @@ Run the installer from the baseline repository checkout:
 
 ```bash
 python skills/omx-project-installer/scripts/omx_project_installer.py install --target /abs/path/to/repo
+python skills/omx-project-installer/scripts/omx_project_installer.py install --target /abs/path/to/repo --program-pack medical_research_foundry_delivery_closeout
 python skills/omx-project-installer/scripts/omx_project_installer.py diff --target /abs/path/to/repo
 python skills/omx-project-installer/scripts/omx_project_installer.py upgrade --target /abs/path/to/repo
 python skills/omx-project-installer/scripts/omx_project_installer.py reconcile --target /abs/path/to/repo
@@ -38,7 +41,9 @@ python skills/omx-project-installer/scripts/omx_project_installer.py reconcile -
 4. Apply the App-native root contract, `.codex/AGENTS.md` OMX layer, and `contracts/project-truth/AGENTS.md`
 5. Reconcile project `.codex/config.toml` with system-level provider and model settings
 6. Repair legacy project-scope skill aliases
-7. Write baseline metadata for later `diff`, `upgrade`, and `reconcile`
+7. Seed a stable continuous planning scaffold under `.omx/context`, `.omx/plans`, and `.omx/reports`
+8. Optionally seed a domain-specific `program pack`
+9. Write baseline metadata for later `diff`, `upgrade`, and `reconcile`
 
 Public `README` surfaces remain human-owned and are not baseline-managed.
 
@@ -60,6 +65,9 @@ Repository differences live inside the content of `contracts/project-truth/AGENT
 - `contracts/project-truth/AGENTS.md` becomes the single project authority path
 - System-level provider configuration is copied back into project-level `.codex/config.toml`
 - Known legacy alias names are repaired after project-scope setup
+- Missing `.omx/context + .omx/plans + .omx/reports` control surfaces are initialized by default
+- `PROGRAM_ROUTING.md` is available as the stable planning map for `Codex App` and `OMX`
+- Optional `program pack` scaffolds can be applied without overwriting existing project truth files
 - Project truth contracts are not silently replaced during `upgrade` or `reconcile`
 
 ## Resources (optional)

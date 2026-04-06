@@ -1,4 +1,6 @@
 import importlib.util
+import io
+import json
 import sys
 import tomllib
 import unittest
@@ -222,6 +224,195 @@ class LegacyCleanupTests(unittest.TestCase):
             self.assertFalse((legacy_dir / "README.md").exists())
             self.assertFalse((legacy_dir / "omx-cli.md").exists())
             self.assertFalse((legacy_dir / "codex-app.md").exists())
+
+
+class ProgramRoutingAndPackTests(unittest.TestCase):
+    def _seed_project(self, repo_root: Path) -> None:
+        (repo_root / "README.md").write_text("# Demo Project\n", encoding="utf-8")
+        (repo_root / "contracts" / "project-truth").mkdir(parents=True, exist_ok=True)
+        (repo_root / "contracts" / "project-truth" / "AGENTS.md").write_text("# truth\n", encoding="utf-8")
+        project_codex = repo_root / ".codex"
+        project_codex.mkdir(parents=True, exist_ok=True)
+        (project_codex / "config.toml").write_text(
+            'model_provider = "gflab"\n'
+            'model = "gpt-5.4"\n'
+            'model_reasoning_effort = "high"\n'
+            "\n"
+            "[model_providers.gflab]\n"
+            'base_url = "https://example.invalid/v1"\n',
+            encoding="utf-8",
+        )
+
+    def _seed_user_home(self, home_root: Path) -> None:
+        user_codex = home_root / ".codex"
+        user_codex.mkdir(parents=True, exist_ok=True)
+        (user_codex / "config.toml").write_text(
+            'model_provider = "gflab"\n'
+            'model = "gpt-5.4"\n'
+            'model_reasoning_effort = "high"\n'
+            "\n"
+            "[model_providers.gflab]\n"
+            'base_url = "https://example.invalid/v1"\n',
+            encoding="utf-8",
+        )
+
+    def test_install_creates_program_routing_surface(self):
+        installer = load_module()
+        with TemporaryDirectory() as home_tmpdir, TemporaryDirectory() as repo_tmpdir:
+            home_root = Path(home_tmpdir)
+            repo_root = Path(repo_tmpdir) / "demo-project"
+            repo_root.mkdir(parents=True, exist_ok=True)
+            self._seed_user_home(home_root)
+            self._seed_project(repo_root)
+
+            with mock.patch.object(installer.Path, "home", return_value=home_root):
+                installer.install_or_refresh(
+                    target=repo_root,
+                    scope="project",
+                    contract_path=repo_root / "contracts" / "project-truth" / "AGENTS.md",
+                    display_name="Demo Project",
+                    run_setup=False,
+                    force_setup=False,
+                    verbose=False,
+                    omx_bin="omx",
+                )
+
+            routing = repo_root / ".omx" / "context" / "PROGRAM_ROUTING.md"
+            self.assertTrue(routing.exists())
+            content = routing.read_text(encoding="utf-8")
+            self.assertIn("CURRENT_PROGRAM.md", content)
+            self.assertIn("roadmap-", content)
+
+    def test_diff_target_requires_program_routing_surface(self):
+        installer = load_module()
+        with TemporaryDirectory() as home_tmpdir, TemporaryDirectory() as repo_tmpdir:
+            home_root = Path(home_tmpdir)
+            repo_root = Path(repo_tmpdir) / "demo-project"
+            repo_root.mkdir(parents=True, exist_ok=True)
+            self._seed_user_home(home_root)
+            self._seed_project(repo_root)
+
+            (repo_root / ".gitignore").write_text(".omx/\n.codex/\n", encoding="utf-8")
+            installer.apply_root_and_contracts(
+                repo_root,
+                repo_root / "contracts" / "project-truth" / "AGENTS.md",
+                "Demo Project",
+            )
+            (repo_root / ".codex" / "skills" / "ralph").mkdir(parents=True, exist_ok=True)
+            (repo_root / ".codex" / "skills" / "team").mkdir(parents=True, exist_ok=True)
+            (repo_root / ".codex" / "skills" / "ultrawork").mkdir(parents=True, exist_ok=True)
+            installer.repair_legacy_skill_aliases(repo_root)
+            (repo_root / ".omx" / "context").mkdir(parents=True, exist_ok=True)
+            (repo_root / ".omx" / "plans").mkdir(parents=True, exist_ok=True)
+            (repo_root / ".omx" / "reports" / "demo-project-mainline").mkdir(parents=True, exist_ok=True)
+            (repo_root / ".omx" / "context" / "CURRENT_PROGRAM.md").write_text("# current\n", encoding="utf-8")
+            (repo_root / ".omx" / "context" / "OMX_TEAM_PROMPT.md").write_text("# team\n", encoding="utf-8")
+            (repo_root / ".omx" / "plans" / "spec-program-operating-model.md").write_text("# spec\n", encoding="utf-8")
+            (repo_root / ".omx" / "plans" / "prd-demo-project-mainline.md").write_text("# prd\n", encoding="utf-8")
+            (repo_root / ".omx" / "plans" / "test-spec-demo-project-mainline.md").write_text("# test-spec\n", encoding="utf-8")
+            (repo_root / ".omx" / "plans" / "implementation-demo-project-mainline.md").write_text("# impl\n", encoding="utf-8")
+            (repo_root / ".omx" / "reports" / "demo-project-mainline" / "README.md").write_text("# report\n", encoding="utf-8")
+            (repo_root / ".omx" / "reports" / "demo-project-mainline" / "LATEST_STATUS.md").write_text("# status\n", encoding="utf-8")
+            (repo_root / ".omx" / "reports" / "demo-project-mainline" / "ITERATION_LOG.md").write_text("# log\n", encoding="utf-8")
+            (repo_root / ".omx" / "reports" / "demo-project-mainline" / "OPEN_ISSUES.md").write_text("# issues\n", encoding="utf-8")
+
+            with mock.patch.object(installer.Path, "home", return_value=home_root):
+                with mock.patch("sys.stdout", new_callable=io.StringIO) as stdout:
+                    result = installer.diff_target(
+                        repo_root,
+                        "project",
+                        repo_root / "contracts" / "project-truth" / "AGENTS.md",
+                        "Demo Project",
+                    )
+
+            self.assertEqual(result, 1)
+            self.assertIn("continuous program scaffold", stdout.getvalue())
+            self.assertIn("PROGRAM_ROUTING", stdout.getvalue())
+
+    def test_install_with_program_pack_creates_pack_documents_and_metadata(self):
+        installer = load_module()
+        with TemporaryDirectory() as home_tmpdir, TemporaryDirectory() as repo_tmpdir:
+            home_root = Path(home_tmpdir)
+            repo_root = Path(repo_tmpdir) / "med-autoscience"
+            repo_root.mkdir(parents=True, exist_ok=True)
+            self._seed_user_home(home_root)
+            self._seed_project(repo_root)
+
+            with mock.patch.object(installer.Path, "home", return_value=home_root):
+                installer.install_or_refresh(
+                    target=repo_root,
+                    scope="project",
+                    contract_path=repo_root / "contracts" / "project-truth" / "AGENTS.md",
+                    display_name="Med Auto Science",
+                    run_setup=False,
+                    force_setup=False,
+                    verbose=False,
+                    omx_bin="omx",
+                    program_pack="medical_research_foundry_delivery_closeout",
+                )
+
+            self.assertTrue(
+                (
+                    repo_root
+                    / ".omx"
+                    / "context"
+                    / "LONG_HORIZON_RESEARCH_FOUNDRY_MEDICAL_PROGRAM.md"
+                ).exists()
+            )
+            self.assertTrue(
+                (
+                    repo_root
+                    / ".omx"
+                    / "context"
+                    / "OMX_RESEARCH_FOUNDRY_MEDICAL_DELIVERY_PLANE_CLOSEOUT_PROGRAM_PROMPT.md"
+                ).exists()
+            )
+            self.assertTrue(
+                (
+                    repo_root
+                    / ".omx"
+                    / "plans"
+                    / "roadmap-research-foundry-medical-delivery-plane-closeout-program.md"
+                ).exists()
+            )
+            metadata = json.loads((repo_root / ".agent-contract-baseline.json").read_text(encoding="utf-8"))
+            self.assertEqual(metadata["program_pack"]["id"], "medical_research_foundry_delivery_closeout")
+
+    def test_install_with_program_pack_preserves_existing_pack_files(self):
+        installer = load_module()
+        with TemporaryDirectory() as home_tmpdir, TemporaryDirectory() as repo_tmpdir:
+            home_root = Path(home_tmpdir)
+            repo_root = Path(repo_tmpdir) / "med-autoscience"
+            repo_root.mkdir(parents=True, exist_ok=True)
+            self._seed_user_home(home_root)
+            self._seed_project(repo_root)
+            existing = (
+                repo_root
+                / ".omx"
+                / "context"
+                / "LONG_HORIZON_RESEARCH_FOUNDRY_MEDICAL_PROGRAM.md"
+            )
+            existing.parent.mkdir(parents=True, exist_ok=True)
+            existing.write_text("# custom long horizon\n", encoding="utf-8")
+
+            with mock.patch.object(installer.Path, "home", return_value=home_root):
+                result = installer.install_or_refresh(
+                    target=repo_root,
+                    scope="project",
+                    contract_path=repo_root / "contracts" / "project-truth" / "AGENTS.md",
+                    display_name="Med Auto Science",
+                    run_setup=False,
+                    force_setup=False,
+                    verbose=False,
+                    omx_bin="omx",
+                    program_pack="medical_research_foundry_delivery_closeout",
+                )
+
+            self.assertEqual(existing.read_text(encoding="utf-8"), "# custom long horizon\n")
+            self.assertIn(
+                ".omx/context/LONG_HORIZON_RESEARCH_FOUNDRY_MEDICAL_PROGRAM.md",
+                result["program_pack"]["preserved"],
+            )
 
 
 if __name__ == "__main__":

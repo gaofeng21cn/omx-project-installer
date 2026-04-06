@@ -1,7 +1,7 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "baseline_name": "omx-project-installer",
-  "baseline_version": "0.2.0",
+  "baseline_version": "0.4.0",
   "installer_skill": "omx-project-installer",
   "default_scope": "project",
   "managed_metadata_file": ".agent-contract-baseline.json",
@@ -9,7 +9,41 @@
   "templates": {
     "root_agents": "templates/AGENTS.root.template.md",
     "omx_project_agents": "templates/AGENTS.omx-project.template.md",
-    "project_truth_contract": "templates/contracts/project-truth/AGENTS.md"
+    "project_truth_contract": "templates/contracts/project-truth/AGENTS.md",
+    "program_current_context": "templates/omx/context/CURRENT_PROGRAM.md",
+    "program_routing_context": "templates/omx/context/PROGRAM_ROUTING.md",
+    "program_team_prompt": "templates/omx/context/OMX_TEAM_PROMPT.md",
+    "program_operating_model_spec": "templates/omx/plans/spec-program-operating-model.md",
+    "program_mainline_prd": "templates/omx/plans/prd-mainline.md",
+    "program_mainline_test_spec": "templates/omx/plans/test-spec-mainline.md",
+    "program_mainline_implementation": "templates/omx/plans/implementation-mainline.md",
+    "program_report_readme": "templates/omx/reports/mainline/README.md",
+    "program_report_latest_status": "templates/omx/reports/mainline/LATEST_STATUS.md",
+    "program_report_iteration_log": "templates/omx/reports/mainline/ITERATION_LOG.md",
+    "program_report_open_issues": "templates/omx/reports/mainline/OPEN_ISSUES.md"
+  },
+  "continuous_program_scaffold": {
+    "enabled_by_default": true
+  },
+  "program_packs": {
+    "medical_research_foundry_delivery_closeout": {
+      "description": "Seed a Research Foundry medical delivery-plane closeout control surface.",
+      "replacements": {
+        "PACK_TITLE": "Research Foundry Medical Delivery Plane Closeout",
+        "PACK_PROGRAM_ID": "research-foundry-medical-delivery-plane-closeout-program",
+        "PACK_MAINLINE_ID": "research-foundry-medical-mainline",
+        "PACK_PHASE": "delivery / publication plane convergence",
+        "PACK_ACTIVE_SUBLINE": "submission target sibling contract alignment"
+      },
+      "files": {
+        ".omx/context/LONG_HORIZON_RESEARCH_FOUNDRY_MEDICAL_PROGRAM.md": "templates/program-packs/medical_research_foundry_delivery_closeout/context/LONG_HORIZON_RESEARCH_FOUNDRY_MEDICAL_PROGRAM.md",
+        ".omx/context/OMX_RESEARCH_FOUNDRY_MEDICAL_AUTOPILOT_PROMPT.md": "templates/program-packs/medical_research_foundry_delivery_closeout/context/OMX_RESEARCH_FOUNDRY_MEDICAL_AUTOPILOT_PROMPT.md",
+        ".omx/context/OMX_RESEARCH_FOUNDRY_MEDICAL_DELIVERY_PLANE_CLOSEOUT_PROGRAM_PROMPT.md": "templates/program-packs/medical_research_foundry_delivery_closeout/context/OMX_RESEARCH_FOUNDRY_MEDICAL_DELIVERY_PLANE_CLOSEOUT_PROGRAM_PROMPT.md",
+        ".omx/plans/roadmap-research-foundry-medical-delivery-plane-closeout-program.md": "templates/program-packs/medical_research_foundry_delivery_closeout/plans/roadmap-research-foundry-medical-delivery-plane-closeout-program.md",
+        ".omx/plans/prd-research-foundry-medical-delivery-plane-closeout-program.md": "templates/program-packs/medical_research_foundry_delivery_closeout/plans/prd-research-foundry-medical-delivery-plane-closeout-program.md",
+        ".omx/plans/test-spec-research-foundry-medical-delivery-plane-closeout-program.md": "templates/program-packs/medical_research_foundry_delivery_closeout/plans/test-spec-research-foundry-medical-delivery-plane-closeout-program.md"
+      }
+    }
   },
   "gitignore_entries": [
     ".omx/",

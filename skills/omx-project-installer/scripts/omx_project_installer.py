@@ -8,7 +8,6 @@ import json
 import re
 import shutil
 import subprocess
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -317,12 +316,226 @@ def inspect_legacy_skill_aliases(target: Path) -> dict[str, Any]:
     return status
 
 
+def available_program_packs() -> dict[str, Any]:
+    return MANIFEST.get("program_packs", {})
+
+
+def resolve_program_pack(raw: str | None) -> str | None:
+    if raw is None or raw == "":
+        return None
+    if raw not in available_program_packs():
+        raise ValueError(f"Unknown program pack: {raw}")
+    return raw
+
+
+def program_pack_choices() -> list[str]:
+    return sorted(available_program_packs().keys())
+
+
+def program_pack_spec(program_pack: str | None) -> dict[str, Any] | None:
+    if not program_pack:
+        return None
+    return available_program_packs().get(program_pack)
+
+
 def render_replacements(target: Path, contract_path: Path, display_name: str) -> dict[str, str]:
     rel_contract_path = contract_path.relative_to(target).as_posix()
+    repo_name = target.name
+    repo_id = repo_slug(repo_name)
+    program_id = f"{repo_id}-mainline"
+    report_dir = f".omx/reports/{program_id}"
     return {
         "PROJECT_CONTRACT_PATH": rel_contract_path,
         "DISPLAY_NAME": display_name,
+        "TARGET_PATH": str(target),
+        "REPO_NAME": repo_name,
+        "REPO_ID": repo_id,
+        "PROGRAM_ID": program_id,
+        "REPORT_DIR": report_dir,
+        "CURRENT_PROGRAM_PATH": f"{target}/.omx/context/CURRENT_PROGRAM.md",
+        "PROGRAM_ROUTING_PATH": f"{target}/.omx/context/PROGRAM_ROUTING.md",
+        "TEAM_PROMPT_PATH": f"{target}/.omx/context/OMX_TEAM_PROMPT.md",
+        "PROGRAM_SPEC_PATH": f"{target}/.omx/plans/spec-program-operating-model.md",
+        "PROGRAM_PRD_PATH": f"{target}/.omx/plans/prd-{program_id}.md",
+        "PROGRAM_TEST_SPEC_PATH": f"{target}/.omx/plans/test-spec-{program_id}.md",
+        "PROGRAM_IMPLEMENTATION_PATH": f"{target}/.omx/plans/implementation-{program_id}.md",
+        "PROGRAM_REPORT_README_PATH": f"{target}/.omx/reports/{program_id}/README.md",
+        "PROGRAM_REPORT_STATUS_PATH": f"{target}/.omx/reports/{program_id}/LATEST_STATUS.md",
+        "PROGRAM_REPORT_LOG_PATH": f"{target}/.omx/reports/{program_id}/ITERATION_LOG.md",
+        "PROGRAM_REPORT_ISSUES_PATH": f"{target}/.omx/reports/{program_id}/OPEN_ISSUES.md",
+        "INSTALLED_PROGRAM_PACK_ID": "none",
+        "INSTALLED_PROGRAM_PACK_DESCRIPTION": "No optional program pack installed.",
+        "INSTALLED_PROGRAM_PACK_DOCS": "- none",
+        "PACK_TITLE": "",
+        "PACK_PROGRAM_ID": "",
+        "PACK_MAINLINE_ID": "",
+        "PACK_PHASE": "",
+        "PACK_ACTIVE_SUBLINE": "",
     }
+
+
+def render_program_pack_docs(target: Path, program_pack: str | None) -> str:
+    spec = program_pack_spec(program_pack)
+    if not spec:
+        return "- none"
+    return "\n".join(f"- `{target / rel_path}`" for rel_path in spec["files"])
+
+
+def pack_replacements(
+    target: Path,
+    contract_path: Path,
+    display_name: str,
+    program_pack: str | None,
+) -> dict[str, str]:
+    replacements = render_replacements(target, contract_path, display_name)
+    spec = program_pack_spec(program_pack)
+    if not spec:
+        return replacements
+    replacements["INSTALLED_PROGRAM_PACK_ID"] = program_pack or "none"
+    replacements["INSTALLED_PROGRAM_PACK_DESCRIPTION"] = spec.get("description", "")
+    replacements["INSTALLED_PROGRAM_PACK_DOCS"] = render_program_pack_docs(target, program_pack)
+    for key, value in spec.get("replacements", {}).items():
+        replacements[key] = value
+    return replacements
+
+
+def continuous_program_scaffold_paths(target: Path) -> dict[str, Path]:
+    repo_id = repo_slug(target.name)
+    program_id = f"{repo_id}-mainline"
+    report_root = target / ".omx" / "reports" / program_id
+    return {
+        "current_program": target / ".omx" / "context" / "CURRENT_PROGRAM.md",
+        "program_routing": target / ".omx" / "context" / "PROGRAM_ROUTING.md",
+        "team_prompt": target / ".omx" / "context" / "OMX_TEAM_PROMPT.md",
+        "operating_model_spec": target / ".omx" / "plans" / "spec-program-operating-model.md",
+        "mainline_prd": target / ".omx" / "plans" / f"prd-{program_id}.md",
+        "mainline_test_spec": target / ".omx" / "plans" / f"test-spec-{program_id}.md",
+        "mainline_implementation": target / ".omx" / "plans" / f"implementation-{program_id}.md",
+        "report_readme": report_root / "README.md",
+        "report_latest_status": report_root / "LATEST_STATUS.md",
+        "report_iteration_log": report_root / "ITERATION_LOG.md",
+        "report_open_issues": report_root / "OPEN_ISSUES.md",
+    }
+
+
+def empty_program_pack_result(program_pack: str | None = None) -> dict[str, Any]:
+    spec = program_pack_spec(program_pack)
+    return {
+        "id": program_pack or "",
+        "description": spec.get("description", "") if spec else "",
+        "created": [],
+        "preserved": [],
+    }
+
+
+def apply_continuous_program_scaffold(
+    target: Path,
+    display_name: str,
+    contract_path: Path,
+    program_pack: str | None,
+) -> dict[str, Any]:
+    replacements = pack_replacements(target, contract_path, display_name, program_pack)
+    scaffold_paths = continuous_program_scaffold_paths(target)
+    if inspect_continuous_program_scaffold(target)["in_sync"]:
+        return {
+            "enabled_by_default": bool(MANIFEST.get("continuous_program_scaffold", {}).get("enabled_by_default", False)),
+            "program_id": replacements["PROGRAM_ID"],
+            "report_dir": replacements["REPORT_DIR"],
+            "created": [],
+            "preserved": ["existing-custom-scaffold"],
+        }
+    template_map = {
+        "current_program": "program_current_context",
+        "program_routing": "program_routing_context",
+        "team_prompt": "program_team_prompt",
+        "operating_model_spec": "program_operating_model_spec",
+        "mainline_prd": "program_mainline_prd",
+        "mainline_test_spec": "program_mainline_test_spec",
+        "mainline_implementation": "program_mainline_implementation",
+        "report_readme": "program_report_readme",
+        "report_latest_status": "program_report_latest_status",
+        "report_iteration_log": "program_report_iteration_log",
+        "report_open_issues": "program_report_open_issues",
+    }
+    created: list[str] = []
+    preserved: list[str] = []
+    for key, template_key in template_map.items():
+        path = scaffold_paths[key]
+        if path.exists():
+            preserved.append(path.relative_to(target).as_posix())
+            continue
+        write_text(path, render_template(template_path(template_key), replacements))
+        created.append(path.relative_to(target).as_posix())
+    return {
+        "enabled_by_default": bool(MANIFEST.get("continuous_program_scaffold", {}).get("enabled_by_default", False)),
+        "program_id": replacements["PROGRAM_ID"],
+        "report_dir": replacements["REPORT_DIR"],
+        "created": created,
+        "preserved": preserved,
+    }
+
+
+def inspect_continuous_program_scaffold(target: Path) -> dict[str, Any]:
+    missing: list[str] = []
+    required_exact = {
+        "current_program": target / ".omx" / "context" / "CURRENT_PROGRAM.md",
+        "program_routing": target / ".omx" / "context" / "PROGRAM_ROUTING.md",
+        "team_prompt": target / ".omx" / "context" / "OMX_TEAM_PROMPT.md",
+    }
+    for path in required_exact.values():
+        if not path.exists():
+            missing.append(path.relative_to(target).as_posix())
+
+    plan_patterns = {
+        "spec": ".omx/plans/spec-*.md",
+        "prd": ".omx/plans/prd-*.md",
+        "test_spec": ".omx/plans/test-spec-*.md",
+        "implementation": ".omx/plans/implementation-*.md",
+    }
+    for pattern in plan_patterns.values():
+        if not any(target.glob(pattern)):
+            missing.append(pattern)
+
+    report_roots = sorted(target.glob(".omx/reports/*-mainline"))
+    if not report_roots:
+        missing.append(".omx/reports/*-mainline/")
+    else:
+        required_report_files = ["README.md", "LATEST_STATUS.md", "ITERATION_LOG.md", "OPEN_ISSUES.md"]
+        if not any(all((root / name).exists() for name in required_report_files) for root in report_roots):
+            missing.append(".omx/reports/*-mainline/{README,LATEST_STATUS,ITERATION_LOG,OPEN_ISSUES}.md")
+    return {
+        "in_sync": not missing,
+        "missing": missing,
+    }
+
+
+def apply_program_pack(
+    target: Path,
+    display_name: str,
+    contract_path: Path,
+    program_pack: str | None,
+) -> dict[str, Any]:
+    result = empty_program_pack_result(program_pack)
+    spec = program_pack_spec(program_pack)
+    if not spec:
+        return result
+    replacements = pack_replacements(target, contract_path, display_name, program_pack)
+    for rel_path, template_rel in spec["files"].items():
+        destination = target / rel_path
+        if destination.exists():
+            result["preserved"].append(rel_path)
+            continue
+        write_text(destination, render_template(BASELINE_ROOT / template_rel, replacements))
+        result["created"].append(rel_path)
+    return result
+
+
+def inspect_program_pack(target: Path, program_pack: str | None) -> dict[str, Any]:
+    spec = program_pack_spec(program_pack)
+    if not spec:
+        return {"in_sync": True, "missing": []}
+    missing = [rel_path for rel_path in spec["files"] if not (target / rel_path).exists()]
+    return {"in_sync": not missing, "missing": missing}
 
 
 def parse_contract_path_from_root(root_path: Path) -> Path | None:
@@ -503,6 +716,17 @@ def resolve_legacy_mode(raw: str | None) -> str | None:
     return None
 
 
+def metadata_program_pack(metadata: dict[str, Any] | None) -> str | None:
+    if not metadata:
+        return None
+    program_pack = metadata.get("program_pack")
+    if isinstance(program_pack, dict):
+        return resolve_program_pack(program_pack.get("id"))
+    if isinstance(program_pack, str):
+        return resolve_program_pack(program_pack)
+    return None
+
+
 def install_or_refresh(
     target: Path,
     scope: str,
@@ -513,8 +737,10 @@ def install_or_refresh(
     verbose: bool,
     omx_bin: str,
     legacy_mode: str | None = None,
+    program_pack: str | None = None,
 ) -> dict[str, Any]:
     metadata = json.loads(read_text(metadata_path(target))) if metadata_path(target).exists() else None
+    resolved_program_pack = resolve_program_pack(program_pack) if program_pack is not None else metadata_program_pack(metadata)
     preserved = preserve_existing_root_agents(target, contract_path)
     if run_setup:
         run_omx_setup(target, scope, force_setup, verbose, omx_bin)
@@ -524,9 +750,14 @@ def install_or_refresh(
     applied = apply_root_and_contracts(target, contract_path, display_name)
     config_result = {"applied": False}
     alias_result = {"repaired": [], "skipped": []}
+    scaffold_result = {"enabled_by_default": False, "program_id": "", "report_dir": "", "created": [], "preserved": []}
+    program_pack_result = empty_program_pack_result(resolved_program_pack)
     if scope == "project":
         config_result = reconcile_project_config(target)
         alias_result = repair_legacy_skill_aliases(target)
+        if MANIFEST.get("continuous_program_scaffold", {}).get("enabled_by_default", False):
+            scaffold_result = apply_continuous_program_scaffold(target, display_name, contract_path, resolved_program_pack)
+        program_pack_result = apply_program_pack(target, display_name, contract_path, resolved_program_pack)
     write_metadata(
         target,
         scope,
@@ -541,6 +772,8 @@ def install_or_refresh(
             "gitignore_updated": ensured_ignore,
             "config_reconcile": config_result,
             "legacy_alias_repair": alias_result,
+            "continuous_program_scaffold": scaffold_result,
+            "program_pack": program_pack_result,
         },
     )
     return {
@@ -556,6 +789,8 @@ def install_or_refresh(
         "project_contract_written": applied["project_contract_written"],
         "config_reconcile": config_result,
         "legacy_alias_repair": alias_result,
+        "continuous_program_scaffold": scaffold_result,
+        "program_pack": program_pack_result,
     }
 
 
@@ -570,6 +805,8 @@ def expected_omx_agents(target: Path, contract_path: Path, display_name: str) ->
 def diff_target(target: Path, scope: str, contract_path: Path, display_name: str) -> int:
     issues = 0
     checks: list[str] = []
+    metadata = json.loads(read_text(metadata_path(target))) if metadata_path(target).exists() else None
+    configured_program_pack = metadata_program_pack(metadata)
     root_path = target / "AGENTS.md"
     expected = expected_root(target, contract_path, display_name)
     if not root_path.exists():
@@ -615,6 +852,20 @@ def diff_target(target: Path, scope: str, contract_path: Path, display_name: str
             detail = aliases["missing"] + aliases["broken"]
             checks.append(f"legacy skill aliases: drift ({', '.join(detail)})")
             issues += 1
+        if MANIFEST.get("continuous_program_scaffold", {}).get("enabled_by_default", False):
+            scaffold = inspect_continuous_program_scaffold(target)
+            if scaffold["in_sync"]:
+                checks.append("continuous program scaffold: ok")
+            else:
+                checks.append(f"continuous program scaffold: missing ({', '.join(scaffold['missing'])})")
+                issues += 1
+        if configured_program_pack:
+            pack = inspect_program_pack(target, configured_program_pack)
+            if pack["in_sync"]:
+                checks.append(f"program pack ({configured_program_pack}): ok")
+            else:
+                checks.append(f"program pack ({configured_program_pack}): missing ({', '.join(pack['missing'])})")
+                issues += 1
     for line in checks:
         print(line)
     return 1 if issues else 0
@@ -645,6 +896,7 @@ def command_install(args: argparse.Namespace) -> int:
         verbose=args.verbose,
         omx_bin=args.omx_bin,
         legacy_mode=resolve_legacy_mode(args.mode),
+        program_pack=args.program_pack,
     )
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
@@ -675,6 +927,7 @@ def command_upgrade(args: argparse.Namespace) -> int:
         verbose=args.verbose,
         omx_bin=args.omx_bin,
         legacy_mode=resolve_legacy_mode(args.mode) or metadata.get("legacy_mode"),
+        program_pack=args.program_pack if args.program_pack is not None else metadata_program_pack(metadata),
     )
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
@@ -696,6 +949,7 @@ def command_reconcile(args: argparse.Namespace) -> int:
         verbose=args.verbose,
         omx_bin=args.omx_bin,
         legacy_mode=metadata.get("legacy_mode"),
+        program_pack=args.program_pack if args.program_pack is not None else metadata_program_pack(metadata),
     )
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
@@ -717,6 +971,7 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("--display-name", help="Display name for contract stubs")
         sp.add_argument("--scope", default=scope_default, choices=["project", "user"], help="OMX setup scope")
         sp.add_argument("--omx-bin", default="omx", help="omx executable to use")
+        sp.add_argument("--program-pack", choices=program_pack_choices(), help="Optional long-horizon program scaffold pack")
         sp.add_argument("--verbose", action="store_true")
         sp.add_argument("--force", action="store_true", help="Pass --force to omx setup when invoked")
 

@@ -26,6 +26,8 @@
 - 将项目根 `AGENTS.md` 从单体文件收束成“App-native 根入口 + `.codex/AGENTS.md` OMX 编排层 + project-truth 合同 + 本机 overlay”
 - 在项目级安装后，把系统级 `~/.codex/config.toml` 中的 provider / model / reasoning 连接真相回灌到项目级 `.codex/config.toml`
 - 修复项目级安装后遗留的旧 skill alias 兼容问题
+- 为 `Codex App + OMX` 种下稳定的 `.omx/context + .omx/plans + .omx/reports` 规划路由面
+- 在需要时为特定领域种下可选的 `program pack`
 - 记录 baseline 版本与受管文件，支持后续 `diff / upgrade / reconcile`
 
 ## 核心模型
@@ -46,9 +48,9 @@
 ## 仓库结构
 
 - `baseline.manifest.json`
-  - 基线版本、受管文件、统一 project-truth 路径、config 继承规则、legacy alias 修复规则
+  - 基线版本、受管文件、统一 project-truth 路径、config 继承规则、legacy alias 修复规则、program pack 注册表
 - `templates/`
-  - 根 `AGENTS.md` / `.codex/AGENTS.md` / project-truth 模板
+  - 根 `AGENTS.md` / `.codex/AGENTS.md` / project-truth 模板 / `.omx` continuous scaffold / 可选 program pack 模板
 - `examples/`
   - 从现有项目抽出的参考快照
 - `skills/omx-project-installer/`
@@ -63,7 +65,35 @@
 3. 落项目根入口、`.codex/AGENTS.md` OMX 编排层与 `contracts/project-truth/AGENTS.md`
 4. 把系统级 provider / model / reasoning 配置回灌到项目级 `.codex/config.toml`
 5. 修复 legacy skill alias
-6. 写入 `.agent-contract-baseline.json`
+6. 种下 `.omx/context + .omx/plans + .omx/reports` continuous planning scaffold
+7. 可选地种下 `program pack`
+8. 写入 `.agent-contract-baseline.json`
+
+默认 continuous planning scaffold 至少包含：
+
+- `.omx/context/CURRENT_PROGRAM.md`
+- `.omx/context/PROGRAM_ROUTING.md`
+- `.omx/context/OMX_TEAM_PROMPT.md`
+- `.omx/plans/spec-*.md`
+- `.omx/plans/prd-*.md`
+- `.omx/plans/test-spec-*.md`
+- `.omx/plans/implementation-*.md`
+- `.omx/reports/<program-id>/README.md`
+- `.omx/reports/<program-id>/LATEST_STATUS.md`
+- `.omx/reports/<program-id>/ITERATION_LOG.md`
+- `.omx/reports/<program-id>/OPEN_ISSUES.md`
+
+其中 `PROGRAM_ROUTING.md` 的职责很具体：
+
+- 告诉 `Codex App` 进入项目后，当前应该先读哪些 `.omx` 文档
+- 告诉 `OMX` 长期 roadmap、PRD、test-spec、implementation、reports 分别应该写到哪里
+- 把“长期规划写作约定”从一次性聊天提示词，收束成项目内固定控制面
+
+如果项目需要一上来就具备某类长期主线骨架，可以安装 optional `program pack`。当前首个 pack 是：
+
+- `medical_research_foundry_delivery_closeout`
+  - 面向 `Research Foundry` 的医学交付主线
+  - 为 delivery/publication plane closeout 提供 long-horizon context、autopilot prompt、roadmap、PRD、test spec
 
 公开 README 不属于 baseline 受管面，其语言、叙事和对外说明必须由目标项目自行维护。
 
@@ -115,6 +145,14 @@ python install.py
 
 ```text
 使用 $omx-project-installer，把当前项目完成 OMX project-scope 安装与合同分层收口。
+```
+
+如果你要同时种下长期 planning pack，可以直接运行：
+
+```bash
+python skills/omx-project-installer/scripts/omx_project_installer.py install \
+  --target /abs/path/to/repo \
+  --program-pack medical_research_foundry_delivery_closeout
 ```
 
 ## 给 Codex 的快速开始指令

@@ -17,6 +17,15 @@
 
 - 系统级 `~/.codex/config.toml` 中 `model_provider`、`model`、`model_reasoning_effort`、`[model_providers.*]` 回灌到项目级 `.codex/config.toml`
 - legacy alias 修复：`analyze`、`build-fix`、`tdd`、`ecomode`、`ultraqa`、`swarm`
+- continuous planning scaffold：
+  - `.omx/context/CURRENT_PROGRAM.md`
+  - `.omx/context/PROGRAM_ROUTING.md`
+  - `.omx/context/OMX_TEAM_PROMPT.md`
+  - `.omx/plans/spec-*.md`
+  - `.omx/plans/prd-*.md`
+  - `.omx/plans/test-spec-*.md`
+  - `.omx/plans/implementation-*.md`
+  - `.omx/reports/<program-id>/*`
 - baseline metadata 落盘：`.agent-contract-baseline.json`
 
 ## 2. 它会替代 `omx setup` 吗？
@@ -32,6 +41,26 @@
 - OMX 负责生成 project-scope 骨架
 - baseline 安装器负责把根 `AGENTS.md` 恢复成 App-native 入口，把 OMX 编排层放到 `.codex/AGENTS.md`，并把配置继承和兼容修复补齐
 - baseline 安装器不托管公开 README；README 的语言、叙事和外部呈现由项目自己维护
+
+## 2.1 它为什么还要种 `.omx` 规划文档？
+
+因为很多项目真正卡住的不是“没装上 OMX”，而是：
+
+- `Codex App` 进入项目后，不知道长期规划该写到哪里
+- `OMX` 每次都要靠一大段一次性提示词才能重新接上上下文
+
+因此 installer 现在会额外提供一个稳定 planning control surface，尤其是：
+
+- `CURRENT_PROGRAM.md`
+- `PROGRAM_ROUTING.md`
+- `OMX_TEAM_PROMPT.md`
+
+其中 `PROGRAM_ROUTING.md` 的职责就是明确：
+
+- roadmap 写到哪里
+- PRD / test-spec / implementation 写到哪里
+- reports 写到哪里
+- optional program pack 在当前项目里对应哪些文档
 
 ## 3. 它会把系统级 API key / token 复制到项目级吗？
 
@@ -147,3 +176,22 @@ python skills/omx-project-installer/scripts/omx_project_installer.py reconcile -
 
 - **公开品牌名**：`omx-project-installer`
 - **项目内历史兼容文件名**：`.agent-contract-baseline.json`
+
+## 11. 什么是 `program pack`？
+
+`program pack` 是 installer 的可选层，不是项目真相本身。
+
+它的职责是：
+
+- 在项目刚接入时，种下一组有领域语义的长期主线文档
+- 让 `Codex App + OMX` 从第一轮开始就知道应该往哪类 `.omx` 文档里写规划
+
+它不负责：
+
+- 覆盖项目已有 `CURRENT_PROGRAM.md`
+- 覆盖项目已有 reports
+- 覆盖项目已经演化出来的 active state
+
+当前首个 pack：
+
+- `medical_research_foundry_delivery_closeout`
