@@ -16,7 +16,7 @@
 并在项目级安装后自动做：
 
 - 系统级 `~/.codex/config.toml` 中 `model_provider`、`model`、`model_reasoning_effort`、`[model_providers.*]` 回灌到项目级 `.codex/config.toml`
-- 受控更新保护：优先恢复 pre-setup 快照或最近一次 `setup` backup，再对受管字段应用严格继承，而不是接受 upstream 对整个文件的粗暴覆盖
+- 受控更新保护：优先恢复 pre-setup 快照或最近一次 `setup` backup，再把 OMX 受管字段从最新 setup 输出精确并回，最后对系统级 provider / model / reasoning 应用严格继承，而不是接受 upstream 对整个文件的粗暴覆盖
 - legacy alias 修复：补齐 `analyze`、`build-fix`、`tdd`、`ecomode`、`ultraqa`、`swarm`
 - continuous planning scaffold：
   - `.omx/context/CURRENT_PROGRAM.md`
@@ -64,7 +64,7 @@ python skills/omx-project-installer/scripts/omx_project_installer.py reconcile -
 也就是说：
 
 - 根 `AGENTS.md` 如果被 upstream OMX 顶层模板顶掉，优先恢复 pre-setup 快照 / 最近 backup；如果当前文件本来就是项目侧内容，则不再无条件重写
-- 项目 `.codex/config.toml` 优先恢复 pre-setup 快照 / 最近 backup，再只对 provider / model 等受管字段做严格继承
+- 项目 `.codex/config.toml` 优先恢复 pre-setup 快照 / 最近 backup，再把 `notify`、OMX feature/env/agent 键以及 `mcp_servers.omx_*` 从最新 setup 输出精确并回，最后只对 provider / model / reasoning 等系统级真相做严格继承
 - 如果你确实想强制改写，也可以显式传：
   - `--root-agents-policy template`
   - `--project-config-policy setup-output`

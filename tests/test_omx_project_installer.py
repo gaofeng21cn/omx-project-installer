@@ -76,6 +76,127 @@ class ContractLayerWriteTests(unittest.TestCase):
 
 
 class ConfigInheritanceTests(unittest.TestCase):
+    def test_install_or_refresh_auto_merges_setup_managed_config_while_preserving_custom_config(self):
+        installer = load_module()
+        with TemporaryDirectory() as home_tmpdir, TemporaryDirectory() as repo_tmpdir:
+            home_root = Path(home_tmpdir)
+            user_codex = home_root / ".codex"
+            user_codex.mkdir(parents=True, exist_ok=True)
+            (user_codex / "config.toml").write_text(
+                'model_provider = "gflab"\n'
+                'model = "gpt-5.4"\n'
+                'model_reasoning_effort = "xhigh"\n'
+                '\n'
+                '[model_providers.gflab]\n'
+                'base_url = "https://example.invalid/v1"\n',
+                encoding="utf-8",
+            )
+
+            repo_root = Path(repo_tmpdir)
+            contract_path = repo_root / "contracts" / "project-truth" / "AGENTS.md"
+            contract_path.parent.mkdir(parents=True, exist_ok=True)
+            contract_path.write_text("# truth\n", encoding="utf-8")
+            project_codex = repo_root / ".codex"
+            project_codex.mkdir(parents=True, exist_ok=True)
+            project_config = project_codex / "config.toml"
+            project_config.write_text(
+                'notify = ["node", "/custom/notify.js"]\n'
+                'developer_instructions = "project-custom"\n'
+                'model_provider = "placeholder"\n'
+                'model = "placeholder-model"\n'
+                'model_reasoning_effort = "medium"\n'
+                'custom_setting = "preserve-me"\n'
+                '\n'
+                '[features]\n'
+                'fast_mode = false\n'
+                'my_feature = true\n'
+                'codex_hooks = false\n'
+                '\n'
+                '[env]\n'
+                'KEEP_ME = "1"\n'
+                '\n'
+                '[agents]\n'
+                'max_threads = 2\n'
+                '\n'
+                '[mcp_servers.custom]\n'
+                'command = "node"\n'
+                'args = ["/custom/server.js"]\n',
+                encoding="utf-8",
+            )
+
+            def fake_run_setup(target: Path, scope: str, force: bool, verbose: bool, omx_bin: str) -> None:
+                self.assertEqual(scope, "project")
+                (target / "AGENTS.md").write_text("upstream overwrite\n", encoding="utf-8")
+                project_config.write_text(
+                    'notify = ["node", "/omx/notify.js"]\n'
+                    'developer_instructions = "omx-managed"\n'
+                    'model_provider = "omx-provider"\n'
+                    'model = "omx-model"\n'
+                    'model_reasoning_effort = "high"\n'
+                    'model_context_window = 1000000\n'
+                    'model_auto_compact_token_limit = 900000\n'
+                    '\n'
+                    '[features]\n'
+                    'multi_agent = true\n'
+                    'child_agents_md = true\n'
+                    'codex_hooks = true\n'
+                    '\n'
+                    '[env]\n'
+                    'USE_OMX_EXPLORE_CMD = "1"\n'
+                    '\n'
+                    '[agents]\n'
+                    'max_threads = 6\n'
+                    'max_depth = 2\n'
+                    '\n'
+                    '[mcp_servers.omx_state]\n'
+                    'command = "node"\n'
+                    'args = ["/omx/state.js"]\n'
+                    '\n'
+                    '[mcp_servers.omx_memory]\n'
+                    'command = "node"\n'
+                    'args = ["/omx/memory.js"]\n',
+                    encoding="utf-8",
+                )
+
+            with mock.patch.dict("os.environ", {"HOME": str(home_root)}):
+                with mock.patch.object(installer.Path, "home", return_value=home_root):
+                    with mock.patch.object(installer, "run_omx_setup", side_effect=fake_run_setup):
+                        result = installer.install_or_refresh(
+                            target=repo_root,
+                            scope="project",
+                            contract_path=contract_path,
+                            display_name="Demo",
+                            run_setup=True,
+                            force_setup=False,
+                            verbose=False,
+                            omx_bin="omx",
+                        )
+
+            parsed = tomllib.loads(project_config.read_text(encoding="utf-8"))
+            self.assertEqual(parsed["notify"][1], "/omx/notify.js")
+            self.assertEqual(parsed["developer_instructions"], "omx-managed")
+            self.assertEqual(parsed["custom_setting"], "preserve-me")
+            self.assertEqual(parsed["model_provider"], "gflab")
+            self.assertEqual(parsed["model"], "gpt-5.4")
+            self.assertEqual(parsed["model_reasoning_effort"], "xhigh")
+            self.assertNotIn("model_context_window", parsed)
+            self.assertNotIn("model_auto_compact_token_limit", parsed)
+            self.assertFalse(parsed["features"]["fast_mode"])
+            self.assertTrue(parsed["features"]["my_feature"])
+            self.assertTrue(parsed["features"]["multi_agent"])
+            self.assertTrue(parsed["features"]["child_agents_md"])
+            self.assertTrue(parsed["features"]["codex_hooks"])
+            self.assertEqual(parsed["env"]["KEEP_ME"], "1")
+            self.assertEqual(parsed["env"]["USE_OMX_EXPLORE_CMD"], "1")
+            self.assertEqual(parsed["agents"]["max_threads"], 6)
+            self.assertEqual(parsed["agents"]["max_depth"], 2)
+            self.assertIn("custom", parsed["mcp_servers"])
+            self.assertIn("omx_state", parsed["mcp_servers"])
+            self.assertIn("omx_memory", parsed["mcp_servers"])
+            self.assertEqual(result["update_policies"]["project_config"], "auto")
+            self.assertTrue(result["config_reconcile"]["restore_applied"])
+            self.assertEqual(result["config_reconcile"]["restore_source"], "pre-setup-snapshot")
+
     def test_reconcile_project_config_removes_context_limits_missing_from_user_config(self):
         installer = load_module()
         with TemporaryDirectory() as home_tmpdir, TemporaryDirectory() as repo_tmpdir:

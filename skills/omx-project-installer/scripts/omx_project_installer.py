@@ -198,6 +198,8 @@ def empty_config_reconcile_result() -> dict[str, Any]:
         "project_config_present": False,
         "keys_synced": [],
         "tables_synced": [],
+        "managed_keys_synced": [],
+        "managed_tables_synced": [],
     }
 
 
@@ -245,6 +247,103 @@ def prune_legacy_project_config_tables(project_doc: Any) -> list[str]:
         if remove_config_table_path(project_doc, path):
             removed.append(f"{config_table_path_label(path)}:legacy-removed")
     return removed
+
+
+def ensure_toml_table(doc: Any, table_key: str) -> Any:
+    if table_key not in doc:
+        doc[table_key] = tomlkit.table()
+    return doc[table_key]
+
+
+def remove_table_subkey(doc: Any, table_key: str, subkey: str) -> bool:
+    if table_key not in doc:
+        return False
+    table = doc[table_key]
+    if subkey not in table:
+        return False
+    del table[subkey]
+    try:
+        empty = len(table) == 0
+    except Exception:
+        empty = False
+    if empty:
+        del doc[table_key]
+    return True
+
+
+def sync_setup_managed_root_keys(project_doc: Any, setup_doc: Any) -> list[str]:
+    synced: list[str] = []
+    managed = MANIFEST.get("setup_managed_config", {})
+    for key in managed.get("root_keys", []):
+        if key in setup_doc:
+            value = deepcopy_toml_item(setup_doc[key])
+            if key not in project_doc or normalize_toml_value(project_doc[key]) != normalize_toml_value(value):
+                project_doc[key] = value
+                synced.append(key)
+        elif key in project_doc:
+            del project_doc[key]
+            synced.append(f"{key}:removed")
+    return synced
+
+
+def sync_setup_managed_table_subkeys(project_doc: Any, setup_doc: Any) -> list[str]:
+    synced: list[str] = []
+    managed = MANIFEST.get("setup_managed_config", {})
+    for table_key, subkeys in managed.get("table_subkeys", {}).items():
+        setup_table = setup_doc.get(table_key)
+        for subkey in subkeys:
+            label = f"{table_key}.{subkey}"
+            if setup_table and subkey in setup_table:
+                project_table = ensure_toml_table(project_doc, table_key)
+                value = deepcopy_toml_item(setup_table[subkey])
+                if subkey not in project_table or normalize_toml_value(project_table[subkey]) != normalize_toml_value(value):
+                    project_table[subkey] = value
+                    synced.append(label)
+            elif remove_table_subkey(project_doc, table_key, subkey):
+                synced.append(f"{label}:removed")
+    return synced
+
+
+def sync_setup_managed_mcp_servers(project_doc: Any, setup_doc: Any) -> list[str]:
+    synced: list[str] = []
+    managed = MANIFEST.get("setup_managed_config", {})
+    prefixes = tuple(managed.get("mcp_server_prefixes", []))
+    if not prefixes:
+        return synced
+    setup_servers = setup_doc.get("mcp_servers")
+    setup_managed_keys = {
+        str(key) for key in (setup_servers.keys() if setup_servers else []) if str(key).startswith(prefixes)
+    }
+    project_servers = project_doc.get("mcp_servers")
+    project_managed_keys = {
+        str(key) for key in (project_servers.keys() if project_servers else []) if str(key).startswith(prefixes)
+    }
+
+    if setup_managed_keys:
+        project_servers = ensure_toml_table(project_doc, "mcp_servers")
+        for key in sorted(setup_managed_keys):
+            value = deepcopy_toml_item(setup_servers[key])
+            if key not in project_servers or normalize_toml_value(project_servers[key]) != normalize_toml_value(value):
+                project_servers[key] = value
+                synced.append(f"mcp_servers.{key}")
+
+    for key in sorted(project_managed_keys - setup_managed_keys):
+        if remove_table_subkey(project_doc, "mcp_servers", key):
+            synced.append(f"mcp_servers.{key}:removed")
+    return synced
+
+
+def merge_setup_managed_project_config(seed_content: str, setup_output_content: str) -> dict[str, Any]:
+    project_doc = tomlkit.parse(seed_content)
+    setup_doc = tomlkit.parse(setup_output_content)
+    managed_keys = sync_setup_managed_root_keys(project_doc, setup_doc)
+    managed_tables = sync_setup_managed_table_subkeys(project_doc, setup_doc)
+    managed_tables.extend(sync_setup_managed_mcp_servers(project_doc, setup_doc))
+    return {
+        "content": tomlkit.dumps(project_doc),
+        "managed_keys_synced": managed_keys,
+        "managed_tables_synced": managed_tables,
+    }
 
 
 def reconcile_project_config(target: Path) -> dict[str, Any]:
@@ -706,10 +805,14 @@ def apply_project_config_update(
     metadata: dict[str, Any] | None,
     policy: str,
     pre_setup_project_config: str | None,
+    setup_ran: bool,
 ) -> dict[str, Any]:
     result = empty_config_reconcile_result()
+    managed_keys_synced: list[str] = []
+    managed_tables_synced: list[str] = []
     project_config = project_config_path(target)
     backup_content = latest_setup_backup_text(target, ".codex/config.toml")
+    setup_output_content = read_text(project_config) if project_config.exists() else None
     seed_content: str | None = None
     seed_source = ""
 
@@ -724,6 +827,12 @@ def apply_project_config_update(
         if seed_content is None and metadata is not None and backup_content is not None:
             seed_content = backup_content
             seed_source = "latest-setup-backup"
+
+    if policy == "auto" and setup_ran and seed_content is not None and setup_output_content is not None:
+        merged = merge_setup_managed_project_config(seed_content, setup_output_content)
+        seed_content = merged["content"]
+        managed_keys_synced = merged["managed_keys_synced"]
+        managed_tables_synced = merged["managed_tables_synced"]
 
     restored = False
     if seed_content is not None:
@@ -740,6 +849,8 @@ def apply_project_config_update(
         return result
 
     result = reconcile_project_config(target)
+    result["managed_keys_synced"] = managed_keys_synced
+    result["managed_tables_synced"] = managed_tables_synced
     result["restore_applied"] = restored
     result["restore_source"] = seed_source
     result["policy"] = policy
@@ -1005,6 +1116,7 @@ def install_or_refresh(
             metadata=metadata,
             policy=resolved_project_config_policy,
             pre_setup_project_config=pre_setup_project_config,
+            setup_ran=run_setup,
         )
         alias_result = repair_legacy_skill_aliases(target)
         if MANIFEST.get("continuous_program_scaffold", {}).get("enabled_by_default", False):

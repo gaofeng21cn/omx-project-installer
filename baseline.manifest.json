@@ -1,7 +1,7 @@
 {
   "schema_version": 3,
   "baseline_name": "omx-project-installer",
-  "baseline_version": "0.5.1",
+  "baseline_version": "0.5.2",
   "installer_skill": "omx-project-installer",
   "default_scope": "project",
   "managed_metadata_file": ".agent-contract-baseline.json",
@@ -78,6 +78,29 @@
   "controlled_update": {
     "root_agents_policy": "auto",
     "project_config_policy": "auto"
+  },
+  "setup_managed_config": {
+    "root_keys": [
+      "notify",
+      "developer_instructions"
+    ],
+    "table_subkeys": {
+      "features": [
+        "multi_agent",
+        "child_agents_md",
+        "codex_hooks"
+      ],
+      "env": [
+        "USE_OMX_EXPLORE_CMD"
+      ],
+      "agents": [
+        "max_threads",
+        "max_depth"
+      ]
+    },
+    "mcp_server_prefixes": [
+      "omx_"
+    ]
   },
   "legacy_skill_aliases": {
     "analyze": {

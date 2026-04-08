@@ -40,7 +40,7 @@ python skills/omx-project-installer/scripts/omx_project_installer.py reconcile -
 3. Preserve any pre-existing root `AGENTS.md`
 4. Apply the App-native root contract, `.codex/AGENTS.md` OMX layer, and `contracts/project-truth/AGENTS.md`
 5. Reconcile project `.codex/config.toml` with system-level provider and model settings
-6. Restore the pre-setup project config snapshot, then re-apply strict user-scope provider/model inheritance
+6. Restore the pre-setup project config snapshot, merge back OMX-managed config from the latest setup output, then re-apply strict user-scope provider/model inheritance
 7. Repair the project-scope legacy alias layer for `analyze`、`build-fix`、`tdd`、`ecomode`、`ultraqa`、`swarm`
 8. Seed a stable continuous planning scaffold under `.omx/context`, `.omx/plans`, and `.omx/reports`
 9. Optionally seed a domain-specific `program pack`
@@ -65,7 +65,7 @@ Repository differences live inside the content of `contracts/project-truth/AGENT
 - `.codex/AGENTS.md` becomes the OMX project-scope orchestration layer
 - `contracts/project-truth/AGENTS.md` becomes the single project authority path
 - System-level provider configuration is copied back into project-level `.codex/config.toml`
-- Project-scoped `omx setup` refreshes are wrapped in a controlled update flow so pre-existing `.codex/config.toml` content is restored before inheritance is re-applied
+- Project-scoped `omx setup` refreshes are wrapped in a controlled update flow so pre-existing `.codex/config.toml` content is restored, OMX-managed keys are merged back from setup output, and user-scope provider/model truth is re-applied
 - Known legacy alias names are repaired after project-scope setup
 - Missing `.omx/context + .omx/plans + .omx/reports` control surfaces are initialized by default
 - `PROGRAM_ROUTING.md` is available as the stable planning map for `Codex App` and `OMX`

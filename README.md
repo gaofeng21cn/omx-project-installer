@@ -64,7 +64,7 @@
 2. 备份已有根 `AGENTS.md`
 3. 落项目根入口、`.codex/AGENTS.md` OMX 编排层与 `contracts/project-truth/AGENTS.md`
 4. 保护根 `AGENTS.md` 的 App-native 入口分层，不接受 upstream 单体模板直接落根
-5. 保护项目级 `.codex/config.toml`：如果 refresh 期间执行了 `omx setup`，先恢复 pre-setup 快照，再严格回灌系统级 provider / model / reasoning
+5. 保护项目级 `.codex/config.toml`：如果 refresh 期间执行了 `omx setup`，先恢复 pre-setup 快照，再把 OMX 受管配置从最新 setup 输出精确并回，同时严格回灌系统级 provider / model / reasoning
 6. 在项目级 `.codex/skills/` 修复 legacy alias 兼容面，补齐 `analyze`、`build-fix`、`tdd`、`ecomode`、`ultraqa`、`swarm`
 7. 种下 `.omx/context + .omx/plans + .omx/reports` continuous planning scaffold
 8. 可选地种下 `program pack`
@@ -116,7 +116,7 @@
 
 - OMX 负责生成 project-scope 本地骨架
 - baseline 安装器负责把项目根 `AGENTS.md` 恢复为 App-native 入口、把 OMX 编排层落到 `.codex/AGENTS.md`、恢复项目真相层，并把系统级模型配置重新压回项目级
-- 如果通过 installer 触发 upstream refresh，baseline 会先恢复 pre-setup 的项目 config，再只对受管字段应用严格继承，避免把整份 `.codex/config.toml` 当缓存整体替换
+- 如果通过 installer 触发 upstream refresh，baseline 会先恢复 pre-setup 的项目 config，再只把 OMX 受管字段从 setup 输出精确并回，随后对系统级 provider / model / reasoning 应用严格继承，避免把整份 `.codex/config.toml` 当缓存整体替换
 - baseline 安装器不托管公开 README，也不会根据固定模板改写 README 的语言或公开叙事
 
 ## 受控更新入口
@@ -141,7 +141,7 @@ python skills/omx-project-installer/scripts/omx_project_installer.py upgrade --t
 
 1. 让 upstream `omx setup` 刷新 prompts / skills / native agents / managed config 骨架
 2. 把根 `AGENTS.md` 收回 installer 的 App-native 根入口模板
-3. 把 pre-setup 项目 config 恢复回来，再对受管字段做严格继承
+3. 把 pre-setup 项目 config 恢复回来，把 OMX 受管字段精确并回，再对系统级 provider / model / reasoning 做严格继承
 
 默认策略现在是：
 
