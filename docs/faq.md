@@ -16,7 +16,8 @@
 并在项目级安装后自动做：
 
 - 系统级 `~/.codex/config.toml` 中 `model_provider`、`model`、`model_reasoning_effort`、`[model_providers.*]` 回灌到项目级 `.codex/config.toml`
-- legacy alias 修复：`analyze`、`build-fix`、`tdd`、`ecomode`、`ultraqa`、`swarm`
+- 受控更新保护：优先恢复 pre-setup 快照或最近一次 `setup` backup，再对受管字段应用严格继承，而不是接受 upstream 对整个文件的粗暴覆盖
+- legacy alias 修复：补齐 `analyze`、`build-fix`、`tdd`、`ecomode`、`ultraqa`、`swarm`
 - continuous planning scaffold：
   - `.omx/context/CURRENT_PROGRAM.md`
   - `.omx/context/PROGRAM_ROUTING.md`
@@ -41,6 +42,32 @@
 - OMX 负责生成 project-scope 骨架
 - baseline 安装器负责把根 `AGENTS.md` 恢复成 App-native 入口，把 OMX 编排层放到 `.codex/AGENTS.md`，并把配置继承和兼容修复补齐
 - baseline 安装器不托管公开 README；README 的语言、叙事和外部呈现由项目自己维护
+
+当前推荐的受控入口是：
+
+```bash
+python skills/omx-project-installer/scripts/omx_project_installer.py reconcile --target /abs/path/to/repo
+python skills/omx-project-installer/scripts/omx_project_installer.py upgrade --target /abs/path/to/repo
+```
+
+如果你确实要先跑 upstream refresh，再收口：
+
+```bash
+python skills/omx-project-installer/scripts/omx_project_installer.py reconcile --target /abs/path/to/repo --run-omx-setup
+```
+
+默认受控更新策略是：
+
+- `--root-agents-policy auto`
+- `--project-config-policy auto`
+
+也就是说：
+
+- 根 `AGENTS.md` 如果被 upstream OMX 顶层模板顶掉，优先恢复 pre-setup 快照 / 最近 backup；如果当前文件本来就是项目侧内容，则不再无条件重写
+- 项目 `.codex/config.toml` 优先恢复 pre-setup 快照 / 最近 backup，再只对 provider / model 等受管字段做严格继承
+- 如果你确实想强制改写，也可以显式传：
+  - `--root-agents-policy template`
+  - `--project-config-policy setup-output`
 
 ## 2.1 它为什么还要种 `.omx` 规划文档？
 
@@ -130,39 +157,25 @@ python skills/omx-project-installer/scripts/omx_project_installer.py reconcile -
 使用 $omx-project-installer，把当前项目完成 OMX project-scope 安装与合同分层收口。
 ```
 
-## 8. 如果 OMX 上游已经 merge 了 legacy alias 修复，为什么这里还保留兼容修复？
+## 8. 旧 skill alias 兼容补丁现在为什么还保留？
 
-因为“已经 merge”不等于“已经进入正式 release”。
+因为它还没有在 project-scope 安装路径里真正闭环。
 
-当前判断标准不是 PR 状态，而是：
+当前正式版 `oh-my-codex@0.12.0` 里，已经可以确认进入正式包的部分是：
 
-- 最新正式 release / npm 包里发布的 `templates/AGENTS.md`
-- 是否已经不再引用这些旧路径：
-  - `~/.codex/skills/analyze/SKILL.md`
-  - `~/.codex/skills/ecomode/SKILL.md`
-  - `~/.codex/skills/tdd/SKILL.md`
-  - `~/.codex/skills/build-fix/SKILL.md`
-  - `~/.codex/skills/ultraqa/SKILL.md`
-- 是否已经包含 runtime-only keyword gating
+- `templates/AGENTS.md` 中的 runtime-only keyword gating
+- catalog 中对 `analyze` / `build-fix` / `tdd` / `ecomode` / `ultraqa` / `swarm` 的 alias / merged 注册
 
-在 upstream 的正式 release 真正包含这些修复之前，安装器会继续保留：
+但项目级 `omx setup --scope project` 仍然会把这些 alias / merged skill 当成非 active 目录跳过或删除。
 
-- legacy alias 修复
-- runtime-only keyword gating 兼容修复
+这意味着：
 
-这样可以保证项目级安装在当前正式版本的 OMX 上依然可用，而不会因为“PR 已 merge”就提前删掉必要补丁。
+- 正式模板仍然会引用这些入口
+- project-scope `.codex/skills/` 却可能没有这些入口
 
-## 9. 什么时候可以删掉这些兼容修复？
+所以 installer 仍然必须在项目里补齐这六个 legacy alias，直到 upstream 的 project-scope setup 也把这件事处理完整。
 
-当且仅当 upstream 发布了一个**新于当前检查版本**的正式 release，并且该 release 中的 `templates/AGENTS.md` 已经同时满足：
-
-1. 所有旧 legacy skill 路径都已移除
-2. `analyze` / `build-fix` / `tdd` / `ecomode` / `ultraqa` / `swarm` 都已切到当前 canonical 逻辑
-3. runtime-only keyword gating 已进入正式模板
-
-到那时，才适合在 baseline 安装器里降级或删除这部分兼容修复。
-
-## 10. 既然仓库已经改名，为什么 metadata 文件还是 `.agent-contract-baseline.json`？
+## 9. 既然仓库已经改名，为什么 metadata 文件还是 `.agent-contract-baseline.json`？
 
 这是为了兼容已经落地到项目里的旧安装结果。
 
@@ -177,7 +190,7 @@ python skills/omx-project-installer/scripts/omx_project_installer.py reconcile -
 - **公开品牌名**：`omx-project-installer`
 - **项目内历史兼容文件名**：`.agent-contract-baseline.json`
 
-## 11. 什么是 `program pack`？
+## 10. 什么是 `program pack`？
 
 `program pack` 是 installer 的可选层，不是项目真相本身。
 

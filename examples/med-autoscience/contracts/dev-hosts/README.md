@@ -8,7 +8,7 @@ It exists to keep host/runtime differences out of the project truth contract and
 
 Use the following layering model:
 
-1. Root repository development contract: `AGENTS.md`
+1. Root project entry contract: `AGENTS.md`
 2. Host adapter contract from this directory
 3. Project truth contract: `contracts/project-truth/AGENTS.md`
 4. Optional local-only overlay: `.omx/local/AGENTS.local.md`

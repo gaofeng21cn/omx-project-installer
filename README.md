@@ -1,6 +1,6 @@
 # OMX Project Installer
 
-`omx-project-installer` 是一个兼容性感知的 OMX project-scope 安装器。它的职责是在 upstream 正式吸收并发布相关修复之前，让 OMX 安装进具体项目目录时不破坏项目自己的根 `AGENTS.md`、Codex App 体验和系统级模型配置。
+`omx-project-installer` 是一个兼容性感知的 OMX project-scope 安装器。它的职责是在 upstream 的 project-scope 刷新仍可能直接改写关键项目文件时，让 OMX 安装进具体项目目录而不破坏项目自己的根 `AGENTS.md`、Codex App 体验和系统级模型配置。
 
 > **Quick Start**
 >
@@ -25,7 +25,7 @@
 
 - 将项目根 `AGENTS.md` 从单体文件收束成“App-native 根入口 + `.codex/AGENTS.md` OMX 编排层 + project-truth 合同 + 本机 overlay”
 - 在项目级安装后，把系统级 `~/.codex/config.toml` 中的 provider / model / reasoning 连接真相回灌到项目级 `.codex/config.toml`
-- 修复项目级安装后遗留的旧 skill alias 兼容问题
+- 为 project-scope 更新提供受控刷新机制，避免粗暴覆盖根 `AGENTS.md` 与项目级 `.codex/config.toml`
 - 为 `Codex App + OMX` 种下稳定的 `.omx/context + .omx/plans + .omx/reports` 规划路由面
 - 在需要时为特定领域种下可选的 `program pack`
 - 记录 baseline 版本与受管文件，支持后续 `diff / upgrade / reconcile`
@@ -48,7 +48,7 @@
 ## 仓库结构
 
 - `baseline.manifest.json`
-  - 基线版本、受管文件、统一 project-truth 路径、config 继承规则、legacy alias 修复规则、program pack 注册表
+  - 基线版本、受管文件、统一 project-truth 路径、config 继承规则、受控更新策略、program pack 注册表
 - `templates/`
   - 根 `AGENTS.md` / `.codex/AGENTS.md` / project-truth 模板 / `.omx` continuous scaffold / 可选 program pack 模板
 - `examples/`
@@ -63,11 +63,12 @@
 1. 在目标项目下运行 `omx setup --scope project`
 2. 备份已有根 `AGENTS.md`
 3. 落项目根入口、`.codex/AGENTS.md` OMX 编排层与 `contracts/project-truth/AGENTS.md`
-4. 把系统级 provider / model / reasoning 配置回灌到项目级 `.codex/config.toml`
-5. 修复 legacy skill alias
-6. 种下 `.omx/context + .omx/plans + .omx/reports` continuous planning scaffold
-7. 可选地种下 `program pack`
-8. 写入 `.agent-contract-baseline.json`
+4. 保护根 `AGENTS.md` 的 App-native 入口分层，不接受 upstream 单体模板直接落根
+5. 保护项目级 `.codex/config.toml`：如果 refresh 期间执行了 `omx setup`，先恢复 pre-setup 快照，再严格回灌系统级 provider / model / reasoning
+6. 在项目级 `.codex/skills/` 修复 legacy alias 兼容面，补齐 `analyze`、`build-fix`、`tdd`、`ecomode`、`ultraqa`、`swarm`
+7. 种下 `.omx/context + .omx/plans + .omx/reports` continuous planning scaffold
+8. 可选地种下 `program pack`
+9. 写入 `.agent-contract-baseline.json`
 
 默认 continuous planning scaffold 至少包含：
 
@@ -105,6 +106,7 @@
 - 它会生成项目根 `AGENTS.md`
 - 它没有“整合已有 AGENTS.md”的模式
 - 它不会自动把系统级 provider / model / reasoning 配置重新压回项目级 config
+- 它对项目级 `.codex/config.toml` 没有“只更新受管字段”的模式
 
 因此本仓库采用：
 
@@ -114,7 +116,47 @@
 
 - OMX 负责生成 project-scope 本地骨架
 - baseline 安装器负责把项目根 `AGENTS.md` 恢复为 App-native 入口、把 OMX 编排层落到 `.codex/AGENTS.md`、恢复项目真相层，并把系统级模型配置重新压回项目级
+- 如果通过 installer 触发 upstream refresh，baseline 会先恢复 pre-setup 的项目 config，再只对受管字段应用严格继承，避免把整份 `.codex/config.toml` 当缓存整体替换
 - baseline 安装器不托管公开 README，也不会根据固定模板改写 README 的语言或公开叙事
+
+## 受控更新入口
+
+如果你只是想刷新 OMX 到当前项目，不要直接运行裸 `omx setup --scope project`。
+
+推荐入口：
+
+```bash
+python skills/omx-project-installer/scripts/omx_project_installer.py reconcile --target /abs/path/to/repo
+python skills/omx-project-installer/scripts/omx_project_installer.py upgrade --target /abs/path/to/repo
+```
+
+如果确实需要先拉一遍 upstream setup，再收口：
+
+```bash
+python skills/omx-project-installer/scripts/omx_project_installer.py reconcile --target /abs/path/to/repo --run-omx-setup
+python skills/omx-project-installer/scripts/omx_project_installer.py upgrade --target /abs/path/to/repo --run-omx-setup
+```
+
+这个“受控刷新”模式会做三件事：
+
+1. 让 upstream `omx setup` 刷新 prompts / skills / native agents / managed config 骨架
+2. 把根 `AGENTS.md` 收回 installer 的 App-native 根入口模板
+3. 把 pre-setup 项目 config 恢复回来，再对受管字段做严格继承
+
+默认策略现在是：
+
+- `--root-agents-policy auto`
+- `--project-config-policy auto`
+
+如果你要显式改策略，也可以覆盖：
+
+```bash
+python skills/omx-project-installer/scripts/omx_project_installer.py reconcile \
+  --target /abs/path/to/repo \
+  --run-omx-setup \
+  --root-agents-policy template \
+  --project-config-policy setup-output
+```
 
 ## 当前状态
 

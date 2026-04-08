@@ -1,7 +1,7 @@
 {
   "schema_version": 3,
   "baseline_name": "omx-project-installer",
-  "baseline_version": "0.4.0",
+  "baseline_version": "0.5.1",
   "installer_skill": "omx-project-installer",
   "default_scope": "project",
   "managed_metadata_file": ".agent-contract-baseline.json",
@@ -74,6 +74,10 @@
     "table_keys": [
       "model_providers"
     ]
+  },
+  "controlled_update": {
+    "root_agents_policy": "auto",
+    "project_config_policy": "auto"
   },
   "legacy_skill_aliases": {
     "analyze": {

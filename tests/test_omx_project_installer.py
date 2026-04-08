@@ -118,6 +118,259 @@ class ConfigInheritanceTests(unittest.TestCase):
             self.assertNotIn("model_context_window", parsed)
             self.assertNotIn("model_auto_compact_token_limit", parsed)
 
+    def test_install_or_refresh_restores_project_config_snapshot_after_upstream_setup(self):
+        installer = load_module()
+        with TemporaryDirectory() as home_tmpdir, TemporaryDirectory() as repo_tmpdir:
+            home_root = Path(home_tmpdir)
+            user_codex = home_root / ".codex"
+            user_codex.mkdir(parents=True, exist_ok=True)
+            (user_codex / "config.toml").write_text(
+                'model_provider = "gflab"\n'
+                'model = "gpt-5.4"\n'
+                'model_reasoning_effort = "xhigh"\n'
+                '\n'
+                '[model_providers.gflab]\n'
+                'base_url = "https://example.invalid/v1"\n',
+                encoding="utf-8",
+            )
+
+            repo_root = Path(repo_tmpdir)
+            contract_path = repo_root / "contracts" / "project-truth" / "AGENTS.md"
+            contract_path.parent.mkdir(parents=True, exist_ok=True)
+            contract_path.write_text("# truth\n", encoding="utf-8")
+            project_codex = repo_root / ".codex"
+            project_codex.mkdir(parents=True, exist_ok=True)
+            project_config = project_codex / "config.toml"
+            project_config.write_text(
+                'model_provider = "gflab"\n'
+                'model = "gpt-5.4-mini"\n'
+                'model_reasoning_effort = "medium"\n'
+                'custom_setting = "preserve-me"\n'
+                '\n'
+                '[model_providers.gflab]\n'
+                'base_url = "https://placeholder.invalid/v1"\n'
+                '\n'
+                '[mcp_servers.custom]\n'
+                'command = "custom"\n',
+                encoding="utf-8",
+            )
+
+            def fake_run_setup(target: Path, scope: str, force: bool, verbose: bool, omx_bin: str) -> None:
+                self.assertEqual(scope, "project")
+                (target / "AGENTS.md").write_text("upstream overwrite\n", encoding="utf-8")
+                project_config.write_text(
+                    'model_provider = "gflab"\n'
+                    'model = "gpt-5.4"\n'
+                    'model_reasoning_effort = "high"\n'
+                    'model_context_window = 1000000\n'
+                    'model_auto_compact_token_limit = 900000\n',
+                    encoding="utf-8",
+                )
+
+            with mock.patch.dict("os.environ", {"HOME": str(home_root)}):
+                with mock.patch.object(installer.Path, "home", return_value=home_root):
+                    with mock.patch.object(installer, "run_omx_setup", side_effect=fake_run_setup):
+                        result = installer.install_or_refresh(
+                            target=repo_root,
+                            scope="project",
+                            contract_path=contract_path,
+                            display_name="Demo",
+                            run_setup=True,
+                            force_setup=False,
+                            verbose=False,
+                            omx_bin="omx",
+                        )
+
+            parsed = tomllib.loads(project_config.read_text(encoding="utf-8"))
+            self.assertEqual(parsed["custom_setting"], "preserve-me")
+            self.assertEqual(parsed["model_reasoning_effort"], "xhigh")
+            self.assertNotIn("model_context_window", parsed)
+            self.assertNotIn("model_auto_compact_token_limit", parsed)
+            self.assertIn("custom", parsed["mcp_servers"])
+            self.assertEqual(result["update_policies"]["root_agents"], "auto")
+            self.assertEqual(result["update_policies"]["project_config"], "auto")
+            self.assertTrue(result["config_reconcile"]["restore_applied"])
+            self.assertEqual(result["config_reconcile"]["restore_source"], "pre-setup-snapshot")
+            self.assertNotEqual(
+                (repo_root / "AGENTS.md").read_text(encoding="utf-8"),
+                "upstream overwrite\n",
+            )
+
+    def test_install_or_refresh_recovers_root_and_config_from_latest_setup_backup_without_rerunning_setup(self):
+        installer = load_module()
+        with TemporaryDirectory() as home_tmpdir, TemporaryDirectory() as repo_tmpdir:
+            home_root = Path(home_tmpdir)
+            user_codex = home_root / ".codex"
+            user_codex.mkdir(parents=True, exist_ok=True)
+            (user_codex / "config.toml").write_text(
+                'model_provider = "gflab"\n'
+                'model = "gpt-5.4"\n'
+                'model_reasoning_effort = "xhigh"\n'
+                '\n'
+                '[model_providers.gflab]\n'
+                'base_url = "https://example.invalid/v1"\n',
+                encoding="utf-8",
+            )
+
+            repo_root = Path(repo_tmpdir)
+            (repo_root / ".agent-contract-baseline.json").write_text(
+                json.dumps(
+                    {
+                        "scope": "project",
+                        "display_name": "Demo",
+                        "project_truth_path": "contracts/project-truth/AGENTS.md",
+                        "update_policies": {"root_agents": "auto", "project_config": "auto"},
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            contract_path = repo_root / "contracts" / "project-truth" / "AGENTS.md"
+            contract_path.parent.mkdir(parents=True, exist_ok=True)
+            contract_path.write_text("# truth\n", encoding="utf-8")
+            (repo_root / "AGENTS.md").write_text(
+                "<!-- omx:generated:agents-md -->\n"
+                "# oh-my-codex - Intelligent Multi-Agent Orchestration\n"
+                "This AGENTS.md is the top-level operating contract for the workspace.\n",
+                encoding="utf-8",
+            )
+            project_codex = repo_root / ".codex"
+            project_codex.mkdir(parents=True, exist_ok=True)
+            project_config = project_codex / "config.toml"
+            project_config.write_text(
+                'notify = ["node", "/tmp/overwrite.js"]\n'
+                'model_provider = "gflab"\n'
+                'model = "gpt-5.4"\n'
+                'model_reasoning_effort = "high"\n'
+                'model_context_window = 1000000\n'
+                '\n'
+                '[model_providers.gflab]\n'
+                'base_url = "https://overwrite.invalid/v1"\n',
+                encoding="utf-8",
+            )
+            backup_root = repo_root / ".omx" / "backups" / "setup" / "2026-04-07T00-00-00.000Z"
+            (backup_root / ".codex").mkdir(parents=True, exist_ok=True)
+            (backup_root / "AGENTS.md").write_text("# preserved root contract\n", encoding="utf-8")
+            (backup_root / ".codex" / "config.toml").write_text(
+                'notify = ["bash", "-c", "node \\"$(npm root -g)/oh-my-codex/dist/scripts/notify-hook.js\\" \\"$1\\"", "notify-hook"]\n'
+                'model_provider = "gflab"\n'
+                'model = "gpt-5.4"\n'
+                'model_reasoning_effort = "high"\n'
+                'model_context_window = 1000000\n'
+                '\n'
+                '[model_providers.gflab]\n'
+                'base_url = "https://backup.invalid/v1"\n',
+                encoding="utf-8",
+            )
+
+            with mock.patch.dict("os.environ", {"HOME": str(home_root)}):
+                with mock.patch.object(installer.Path, "home", return_value=home_root):
+                    result = installer.install_or_refresh(
+                        target=repo_root,
+                        scope="project",
+                        contract_path=contract_path,
+                        display_name="Demo",
+                        run_setup=False,
+                        force_setup=False,
+                        verbose=False,
+                        omx_bin="omx",
+                    )
+
+            parsed = tomllib.loads(project_config.read_text(encoding="utf-8"))
+            self.assertEqual((repo_root / "AGENTS.md").read_text(encoding="utf-8"), "# preserved root contract\n")
+            self.assertEqual(result["root_agents_state"]["source"], "latest-setup-backup")
+            self.assertEqual(parsed["notify"][0], "bash")
+            self.assertEqual(parsed["model_reasoning_effort"], "xhigh")
+            self.assertEqual(parsed["model_providers"]["gflab"]["base_url"], "https://example.invalid/v1")
+            self.assertNotIn("model_context_window", parsed)
+
+    def test_reconcile_project_config_removes_legacy_omx_team_run_table(self):
+        installer = load_module()
+        with TemporaryDirectory() as home_tmpdir, TemporaryDirectory() as repo_tmpdir:
+            home_root = Path(home_tmpdir)
+            user_codex = home_root / ".codex"
+            user_codex.mkdir(parents=True, exist_ok=True)
+            (user_codex / "config.toml").write_text(
+                'model_provider = "gflab"\n'
+                'model = "gpt-5.4"\n'
+                'model_reasoning_effort = "xhigh"\n'
+                '\n'
+                '[model_providers.gflab]\n'
+                'base_url = "https://example.invalid/v1"\n',
+                encoding="utf-8",
+            )
+
+            repo_root = Path(repo_tmpdir)
+            project_codex = repo_root / ".codex"
+            project_codex.mkdir(parents=True, exist_ok=True)
+            project_config = project_codex / "config.toml"
+            project_config.write_text(
+                'model_provider = "gflab"\n'
+                'model = "gpt-5.4"\n'
+                'model_reasoning_effort = "high"\n'
+                '\n'
+                '[model_providers.gflab]\n'
+                'base_url = "https://placeholder.invalid/v1"\n'
+                '\n'
+                '[mcp_servers.omx_state]\n'
+                'command = "node"\n'
+                'args = ["/tmp/state-server.js"]\n'
+                '\n'
+                '[mcp_servers.omx_team_run]\n'
+                'command = "node"\n'
+                'args = ["/tmp/team-server.js"]\n',
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(installer.Path, "home", return_value=home_root):
+                result = installer.reconcile_project_config(repo_root)
+
+            self.assertTrue(result["applied"])
+
+            parsed = tomllib.loads(project_config.read_text(encoding="utf-8"))
+            self.assertIn("mcp_servers", parsed)
+            self.assertIn("omx_state", parsed["mcp_servers"])
+            self.assertNotIn("omx_team_run", parsed["mcp_servers"])
+
+    def test_inspect_project_config_inheritance_flags_legacy_omx_team_run_table(self):
+        installer = load_module()
+        with TemporaryDirectory() as home_tmpdir, TemporaryDirectory() as repo_tmpdir:
+            home_root = Path(home_tmpdir)
+            user_codex = home_root / ".codex"
+            user_codex.mkdir(parents=True, exist_ok=True)
+            (user_codex / "config.toml").write_text(
+                'model_provider = "gflab"\n'
+                'model = "gpt-5.4"\n'
+                'model_reasoning_effort = "xhigh"\n'
+                '\n'
+                '[model_providers.gflab]\n'
+                'base_url = "https://example.invalid/v1"\n',
+                encoding="utf-8",
+            )
+
+            repo_root = Path(repo_tmpdir)
+            project_codex = repo_root / ".codex"
+            project_codex.mkdir(parents=True, exist_ok=True)
+            (project_codex / "config.toml").write_text(
+                'model_provider = "gflab"\n'
+                'model = "gpt-5.4"\n'
+                'model_reasoning_effort = "xhigh"\n'
+                '\n'
+                '[model_providers.gflab]\n'
+                'base_url = "https://example.invalid/v1"\n'
+                '\n'
+                '[mcp_servers.omx_team_run]\n'
+                'command = "node"\n'
+                'args = ["/tmp/team-server.js"]\n',
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(installer.Path, "home", return_value=home_root):
+                result = installer.inspect_project_config_inheritance(repo_root)
+
+            self.assertFalse(result["in_sync"])
+            self.assertIn("mcp_servers.omx_team_run:legacy", result["drifted_tables"])
+
 
 class ReadmeSectionTests(unittest.TestCase):
     def test_apply_readme_section_leaves_public_readme_untouched(self):
@@ -225,6 +478,64 @@ class LegacyCleanupTests(unittest.TestCase):
             self.assertFalse((legacy_dir / "omx-cli.md").exists())
             self.assertFalse((legacy_dir / "codex-app.md").exists())
 
+    def test_install_or_refresh_repairs_legacy_project_skill_aliases(self):
+        installer = load_module()
+        with TemporaryDirectory() as home_tmpdir, TemporaryDirectory() as repo_tmpdir:
+            home_root = Path(home_tmpdir)
+            user_codex = home_root / ".codex"
+            user_codex.mkdir(parents=True, exist_ok=True)
+            (user_codex / "config.toml").write_text(
+                'model_provider = "gflab"\n'
+                'model = "gpt-5.4"\n'
+                'model_reasoning_effort = "xhigh"\n'
+                '\n'
+                '[model_providers.gflab]\n'
+                'base_url = "https://example.invalid/v1"\n',
+                encoding="utf-8",
+            )
+
+            repo_root = Path(repo_tmpdir)
+            (repo_root / "contracts" / "project-truth").mkdir(parents=True, exist_ok=True)
+            (repo_root / "contracts" / "project-truth" / "AGENTS.md").write_text("# truth\n", encoding="utf-8")
+            project_codex = repo_root / ".codex"
+            project_codex.mkdir(parents=True, exist_ok=True)
+            (project_codex / "config.toml").write_text(
+                'model_provider = "gflab"\n'
+                'model = "gpt-5.4"\n'
+                'model_reasoning_effort = "high"\n'
+                '\n'
+                '[model_providers.gflab]\n'
+                'base_url = "https://placeholder.invalid/v1"\n',
+                encoding="utf-8",
+            )
+            skills_dir = project_codex / "skills"
+            for canonical in ("ralph", "team", "ultrawork"):
+                (skills_dir / canonical).mkdir(parents=True, exist_ok=True)
+                (skills_dir / canonical / "SKILL.md").write_text(f"# {canonical}\n", encoding="utf-8")
+
+            with mock.patch.object(installer.Path, "home", return_value=home_root):
+                result = installer.install_or_refresh(
+                    target=repo_root,
+                    scope="project",
+                    contract_path=repo_root / "contracts" / "project-truth" / "AGENTS.md",
+                    display_name="Demo",
+                    run_setup=False,
+                    force_setup=False,
+                    verbose=False,
+                    omx_bin="omx",
+                )
+
+            self.assertTrue((skills_dir / "analyze" / "SKILL.md").exists())
+            self.assertTrue((skills_dir / "build-fix" / "SKILL.md").exists())
+            self.assertTrue((skills_dir / "tdd" / "SKILL.md").exists())
+            self.assertTrue((skills_dir / "ecomode").is_symlink())
+            self.assertTrue((skills_dir / "ultraqa").is_symlink())
+            self.assertTrue((skills_dir / "swarm").is_symlink())
+            self.assertEqual(
+                sorted(result["legacy_alias_repair"]["repaired"]),
+                ["analyze", "build-fix", "ecomode", "swarm", "tdd", "ultraqa"],
+            )
+
 
 class ProgramRoutingAndPackTests(unittest.TestCase):
     def _seed_project(self, repo_root: Path) -> None:
@@ -298,10 +609,6 @@ class ProgramRoutingAndPackTests(unittest.TestCase):
                 repo_root / "contracts" / "project-truth" / "AGENTS.md",
                 "Demo Project",
             )
-            (repo_root / ".codex" / "skills" / "ralph").mkdir(parents=True, exist_ok=True)
-            (repo_root / ".codex" / "skills" / "team").mkdir(parents=True, exist_ok=True)
-            (repo_root / ".codex" / "skills" / "ultrawork").mkdir(parents=True, exist_ok=True)
-            installer.repair_legacy_skill_aliases(repo_root)
             (repo_root / ".omx" / "context").mkdir(parents=True, exist_ok=True)
             (repo_root / ".omx" / "plans").mkdir(parents=True, exist_ok=True)
             (repo_root / ".omx" / "reports" / "demo-project-mainline").mkdir(parents=True, exist_ok=True)

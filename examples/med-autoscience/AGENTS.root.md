@@ -14,8 +14,8 @@ Role prompts under `prompts/*.md` are narrower execution surfaces. They must fol
 
 ## Scope Boundary
 
-This root `AGENTS.md` is the repository development contract for agents that modify this codebase.
-It governs local Codex/OMX execution, repository workflow, verification discipline, and orchestration behavior while working inside this repository.
+This root `AGENTS.md` is the project entry contract for direct sessions that enter from the project root, including Codex App and plain Codex sessions.
+It defines the default execution and collaboration rules at the repository root.
 
 It is not the project truth contract by itself.
 The versioned project truth contract lives at `contracts/project-truth/AGENTS.md`.

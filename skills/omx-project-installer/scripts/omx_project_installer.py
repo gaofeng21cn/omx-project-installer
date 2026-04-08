@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import copy
 import glob
+import hashlib
 import json
 import re
 import shutil
@@ -24,6 +25,11 @@ def load_manifest() -> dict[str, Any]:
 
 
 MANIFEST = load_manifest()
+ROOT_AGENTS_POLICIES = ("auto", "preserve", "template")
+PROJECT_CONFIG_POLICIES = ("auto", "preserve", "setup-output")
+LEGACY_PROJECT_CONFIG_TABLE_PATHS = (
+    ("mcp_servers", "omx_team_run"),
+)
 
 
 def now_utc() -> str:
@@ -83,6 +89,35 @@ def backup_file(path: Path, target: Path) -> Path:
     backup = backup_dir / f"{now_utc()}-{rel_name}"
     shutil.copy2(path, backup)
     return backup
+
+
+def sha256_text(content: str) -> str:
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+def latest_setup_backup_path(target: Path, relative_path: str) -> Path | None:
+    backup_root = target / ".omx" / "backups" / "setup"
+    if not backup_root.exists():
+        return None
+    matches = sorted(glob.glob(str(backup_root / "*" / relative_path)))
+    if not matches:
+        return None
+    return Path(matches[-1])
+
+
+def latest_setup_backup_text(target: Path, relative_path: str) -> str | None:
+    backup = latest_setup_backup_path(target, relative_path)
+    if not backup or not backup.exists():
+        return None
+    return read_text(backup)
+
+
+def is_full_omx_root_contract(content: str) -> bool:
+    return (
+        "<!-- omx:generated:agents-md -->" in content
+        and "# oh-my-codex - Intelligent Multi-Agent Orchestration" in content
+        and "This AGENTS.md is the top-level operating contract for the workspace." in content
+    )
 
 
 def upsert_marked_section(current: str, rendered_section: str, start: str, end: str) -> str:
@@ -152,16 +187,70 @@ def normalize_toml_value(value: Any) -> Any:
     return value
 
 
-def reconcile_project_config(target: Path) -> dict[str, Any]:
-    result = {
+def project_config_path(target: Path) -> Path:
+    return target / ".codex" / "config.toml"
+
+
+def empty_config_reconcile_result() -> dict[str, Any]:
+    return {
         "applied": False,
         "user_config_present": False,
         "project_config_present": False,
         "keys_synced": [],
         "tables_synced": [],
     }
+
+
+def config_table_path_label(path: tuple[str, ...]) -> str:
+    return ".".join(path)
+
+
+def has_config_table_path(doc: Any, path: tuple[str, ...]) -> bool:
+    current = doc
+    for key in path:
+        if key not in current:
+            return False
+        current = current[key]
+    return True
+
+
+def remove_config_table_path(doc: Any, path: tuple[str, ...]) -> bool:
+    parents: list[tuple[Any, str]] = []
+    current = doc
+    for key in path[:-1]:
+        if key not in current:
+            return False
+        parents.append((current, key))
+        current = current[key]
+    leaf = path[-1]
+    if leaf not in current:
+        return False
+    del current[leaf]
+    for parent, key in reversed(parents):
+        child = parent[key]
+        try:
+            empty = len(child) == 0
+        except Exception:
+            empty = False
+        if empty:
+            del parent[key]
+            continue
+        break
+    return True
+
+
+def prune_legacy_project_config_tables(project_doc: Any) -> list[str]:
+    removed: list[str] = []
+    for path in LEGACY_PROJECT_CONFIG_TABLE_PATHS:
+        if remove_config_table_path(project_doc, path):
+            removed.append(f"{config_table_path_label(path)}:legacy-removed")
+    return removed
+
+
+def reconcile_project_config(target: Path) -> dict[str, Any]:
+    result = empty_config_reconcile_result()
     user_config = Path.home() / ".codex" / "config.toml"
-    project_config = target / ".codex" / "config.toml"
+    project_config = project_config_path(target)
     if not user_config.exists():
         return result
     result["user_config_present"] = True
@@ -191,6 +280,10 @@ def reconcile_project_config(target: Path) -> dict[str, Any]:
                 project_doc[table_key] = value
                 changed = True
                 result["tables_synced"].append(table_key)
+    removed_legacy_tables = prune_legacy_project_config_tables(project_doc)
+    if removed_legacy_tables:
+        changed = True
+        result["tables_synced"].extend(removed_legacy_tables)
     if changed:
         write_toml(project_config, project_doc)
         result["applied"] = True
@@ -206,7 +299,7 @@ def inspect_project_config_inheritance(target: Path) -> dict[str, Any]:
         "drifted_tables": [],
     }
     user_config = Path.home() / ".codex" / "config.toml"
-    project_config = target / ".codex" / "config.toml"
+    project_config = project_config_path(target)
     if not user_config.exists():
         return result
     result["user_config_present"] = True
@@ -231,6 +324,10 @@ def inspect_project_config_inheritance(target: Path) -> dict[str, Any]:
             if table_key not in project_doc or normalize_toml_value(project_doc[table_key]) != normalize_toml_value(user_doc[table_key]):
                 result["in_sync"] = False
                 result["drifted_tables"].append(table_key)
+    for path in LEGACY_PROJECT_CONFIG_TABLE_PATHS:
+        if has_config_table_path(project_doc, path):
+            result["in_sync"] = False
+            result["drifted_tables"].append(f"{config_table_path_label(path)}:legacy")
     return result
 
 
@@ -256,7 +353,7 @@ def repair_legacy_skill_aliases(target: Path) -> dict[str, Any]:
     skills_dir.mkdir(parents=True, exist_ok=True)
     repaired: list[str] = []
     skipped: list[str] = []
-    for alias, spec in MANIFEST["legacy_skill_aliases"].items():
+    for alias, spec in MANIFEST.get("legacy_skill_aliases", {}).items():
         alias_path = skills_dir / alias
         if path_exists_or_link(alias_path):
             if alias_path.is_symlink() or alias_path.is_file():
@@ -288,9 +385,9 @@ def inspect_legacy_skill_aliases(target: Path) -> dict[str, Any]:
     status = {"in_sync": True, "missing": [], "broken": []}
     if not skills_dir.exists():
         status["in_sync"] = False
-        status["missing"] = sorted(MANIFEST["legacy_skill_aliases"].keys())
+        status["missing"] = sorted(MANIFEST.get("legacy_skill_aliases", {}).keys())
         return status
-    for alias, spec in MANIFEST["legacy_skill_aliases"].items():
+    for alias, spec in MANIFEST.get("legacy_skill_aliases", {}).items():
         alias_path = skills_dir / alias
         if spec["kind"] == "symlink":
             if not alias_path.is_symlink():
@@ -309,11 +406,11 @@ def inspect_legacy_skill_aliases(target: Path) -> dict[str, Any]:
                 status["broken"].append(alias)
             continue
         if spec["kind"] == "wrapper":
-            skill_file = alias_path / "SKILL.md"
-            if not skill_file.exists():
+            if not (alias_path / "SKILL.md").exists():
                 status["in_sync"] = False
                 status["missing"].append(alias)
     return status
+
 
 
 def available_program_packs() -> dict[str, Any]:
@@ -554,6 +651,101 @@ def parse_contract_path_from_root(root_path: Path) -> Path | None:
     return None
 
 
+def resolve_root_agents_policy(raw: str | None) -> str | None:
+    if raw in ROOT_AGENTS_POLICIES:
+        return raw
+    return None
+
+
+def resolve_project_config_policy(raw: str | None) -> str | None:
+    if raw in PROJECT_CONFIG_POLICIES:
+        return raw
+    return None
+
+
+def select_root_agents_content(
+    target: Path,
+    rendered_root: str,
+    metadata: dict[str, Any] | None,
+    policy: str,
+    pre_setup_root_content: str | None,
+) -> tuple[str, str]:
+    current_path = target / "AGENTS.md"
+    current_content = read_text(current_path) if current_path.exists() else None
+    backup_content = latest_setup_backup_text(target, "AGENTS.md")
+
+    if policy == "template":
+        return rendered_root, "template"
+
+    if policy == "preserve":
+        if pre_setup_root_content is not None:
+            return pre_setup_root_content, "pre-setup-snapshot"
+        if backup_content is not None:
+            return backup_content, "latest-setup-backup"
+        if current_content is not None:
+            return current_content, "current"
+        return rendered_root, "template-missing"
+
+    if metadata is None:
+        return rendered_root, "first-install-template"
+    if pre_setup_root_content is not None:
+        return pre_setup_root_content, "pre-setup-snapshot"
+    if current_content is not None and is_full_omx_root_contract(current_content):
+        if backup_content is not None and not is_full_omx_root_contract(backup_content):
+            return backup_content, "latest-setup-backup"
+        return rendered_root, "restore-app-template"
+    if current_content is not None:
+        return current_content, "preserve-current"
+    if backup_content is not None:
+        return backup_content, "latest-setup-backup"
+    return rendered_root, "template-missing"
+
+
+def apply_project_config_update(
+    target: Path,
+    metadata: dict[str, Any] | None,
+    policy: str,
+    pre_setup_project_config: str | None,
+) -> dict[str, Any]:
+    result = empty_config_reconcile_result()
+    project_config = project_config_path(target)
+    backup_content = latest_setup_backup_text(target, ".codex/config.toml")
+    seed_content: str | None = None
+    seed_source = ""
+
+    if policy == "preserve":
+        seed_content = pre_setup_project_config or backup_content
+        seed_source = "pre-setup-snapshot" if pre_setup_project_config is not None else ("latest-setup-backup" if backup_content is not None else "")
+    elif policy == "setup-output":
+        seed_source = "setup-output"
+    else:
+        seed_content = pre_setup_project_config
+        seed_source = "pre-setup-snapshot" if pre_setup_project_config is not None else ""
+        if seed_content is None and metadata is not None and backup_content is not None:
+            seed_content = backup_content
+            seed_source = "latest-setup-backup"
+
+    restored = False
+    if seed_content is not None:
+        current = read_text(project_config) if project_config.exists() else None
+        if current != seed_content:
+            write_text(project_config, seed_content)
+            restored = True
+
+    if policy == "setup-output":
+        result["project_config_present"] = project_config.exists()
+        result["restore_applied"] = restored
+        result["restore_source"] = seed_source
+        result["policy"] = policy
+        return result
+
+    result = reconcile_project_config(target)
+    result["restore_applied"] = restored
+    result["restore_source"] = seed_source
+    result["policy"] = policy
+    return result
+
+
 def discover_legacy_contract_source(target: Path, metadata: dict[str, Any] | None, destination: Path) -> Path | None:
     candidates: list[Path] = []
     if metadata and metadata.get("project_contract_path"):
@@ -629,14 +821,36 @@ def apply_root_and_contracts(
     contract_path: Path,
     display_name: str,
     force_contract: bool = False,
+    metadata: dict[str, Any] | None = None,
+    root_agents_policy: str = "auto",
+    pre_setup_root_content: str | None = None,
 ) -> dict[str, Any]:
     replacements = render_replacements(target, contract_path, display_name)
-    write_text(target / "AGENTS.md", render_template(template_path("root_agents"), replacements))
+    rendered_root = render_template(template_path("root_agents"), replacements)
+    root_content, root_source = select_root_agents_content(
+        target=target,
+        rendered_root=rendered_root,
+        metadata=metadata,
+        policy=root_agents_policy,
+        pre_setup_root_content=pre_setup_root_content,
+    )
+    root_path = target / "AGENTS.md"
+    root_written = not root_path.exists() or read_text(root_path) != root_content
+    if root_written:
+        write_text(root_path, root_content)
     write_text(omx_agents_path(target), render_template(template_path("omx_project_agents"), replacements))
     if force_contract or not contract_path.exists():
         write_text(contract_path, render_template(template_path("project_truth_contract"), replacements))
-        return {"project_contract_written": True}
-    return {"project_contract_written": False}
+        project_contract_written = True
+    else:
+        project_contract_written = False
+    return {
+        "project_contract_written": project_contract_written,
+        "root_agents_policy": root_agents_policy,
+        "root_agents_source": root_source,
+        "root_agents_written": root_written,
+        "root_agents_sha256": sha256_text(root_content),
+    }
 
 
 def apply_readme_section(target: Path, contract_path: Path) -> bool:
@@ -738,22 +952,60 @@ def install_or_refresh(
     omx_bin: str,
     legacy_mode: str | None = None,
     program_pack: str | None = None,
+    root_agents_policy: str | None = None,
+    project_config_policy: str | None = None,
 ) -> dict[str, Any]:
     metadata = json.loads(read_text(metadata_path(target))) if metadata_path(target).exists() else None
     resolved_program_pack = resolve_program_pack(program_pack) if program_pack is not None else metadata_program_pack(metadata)
+    stored_root_agents_policy = resolve_root_agents_policy((metadata or {}).get("update_policies", {}).get("root_agents"))
+    if stored_root_agents_policy == "auto":
+        stored_root_agents_policy = None
+    stored_project_config_policy = resolve_project_config_policy((metadata or {}).get("update_policies", {}).get("project_config"))
+    if stored_project_config_policy == "auto":
+        stored_project_config_policy = None
+    resolved_root_agents_policy = (
+        resolve_root_agents_policy(root_agents_policy)
+        or stored_root_agents_policy
+        or resolve_root_agents_policy(MANIFEST.get("controlled_update", {}).get("root_agents_policy"))
+        or "auto"
+    )
+    resolved_project_config_policy = (
+        resolve_project_config_policy(project_config_policy)
+        or stored_project_config_policy
+        or resolve_project_config_policy(MANIFEST.get("controlled_update", {}).get("project_config_policy"))
+        or "auto"
+    )
     preserved = preserve_existing_root_agents(target, contract_path)
+    pre_setup_root_content = read_text(target / "AGENTS.md") if run_setup and (target / "AGENTS.md").exists() else None
+    pre_setup_project_config = (
+        read_text(project_config_path(target))
+        if run_setup and project_config_path(target).exists()
+        else None
+    )
     if run_setup:
         run_omx_setup(target, scope, force_setup, verbose, omx_bin)
     migration = migrate_project_truth_contract(target, contract_path, metadata)
     cleanup = cleanup_legacy_paths(target)
     ensured_ignore = ensure_gitignore_entries(target / ".gitignore", MANIFEST["gitignore_entries"])
-    applied = apply_root_and_contracts(target, contract_path, display_name)
-    config_result = {"applied": False}
+    applied = apply_root_and_contracts(
+        target,
+        contract_path,
+        display_name,
+        metadata=metadata,
+        root_agents_policy=resolved_root_agents_policy,
+        pre_setup_root_content=pre_setup_root_content,
+    )
+    config_result = empty_config_reconcile_result()
     alias_result = {"repaired": [], "skipped": []}
     scaffold_result = {"enabled_by_default": False, "program_id": "", "report_dir": "", "created": [], "preserved": []}
     program_pack_result = empty_program_pack_result(resolved_program_pack)
     if scope == "project":
-        config_result = reconcile_project_config(target)
+        config_result = apply_project_config_update(
+            target=target,
+            metadata=metadata,
+            policy=resolved_project_config_policy,
+            pre_setup_project_config=pre_setup_project_config,
+        )
         alias_result = repair_legacy_skill_aliases(target)
         if MANIFEST.get("continuous_program_scaffold", {}).get("enabled_by_default", False):
             scaffold_result = apply_continuous_program_scaffold(target, display_name, contract_path, resolved_program_pack)
@@ -770,6 +1022,15 @@ def install_or_refresh(
             "project_truth_migration": migration,
             "legacy_cleanup": cleanup,
             "gitignore_updated": ensured_ignore,
+            "update_policies": {
+                "root_agents": resolved_root_agents_policy,
+                "project_config": resolved_project_config_policy,
+            },
+            "root_agents_state": {
+                "policy": applied["root_agents_policy"],
+                "source": applied["root_agents_source"],
+                "sha256": applied["root_agents_sha256"],
+            },
             "config_reconcile": config_result,
             "legacy_alias_repair": alias_result,
             "continuous_program_scaffold": scaffold_result,
@@ -787,6 +1048,15 @@ def install_or_refresh(
         "legacy_cleanup": cleanup,
         "gitignore_updated": ensured_ignore,
         "project_contract_written": applied["project_contract_written"],
+        "update_policies": {
+            "root_agents": resolved_root_agents_policy,
+            "project_config": resolved_project_config_policy,
+        },
+        "root_agents_state": {
+            "policy": applied["root_agents_policy"],
+            "source": applied["root_agents_source"],
+            "sha256": applied["root_agents_sha256"],
+        },
         "config_reconcile": config_result,
         "legacy_alias_repair": alias_result,
         "continuous_program_scaffold": scaffold_result,
@@ -812,11 +1082,16 @@ def diff_target(target: Path, scope: str, contract_path: Path, display_name: str
     if not root_path.exists():
         checks.append("AGENTS.md: missing")
         issues += 1
-    elif read_text(root_path) != expected:
-        checks.append("AGENTS.md: drift")
-        issues += 1
     else:
-        checks.append("AGENTS.md: ok")
+        current_root = read_text(root_path)
+        root_state = metadata.get("root_agents_state") if metadata else None
+        if root_state and root_state.get("sha256") == sha256_text(current_root):
+            checks.append(f"AGENTS.md: ok ({root_state.get('source', 'managed')})")
+        elif current_root == expected:
+            checks.append("AGENTS.md: ok")
+        else:
+            checks.append("AGENTS.md: drift")
+            issues += 1
     omx_path = omx_agents_path(target)
     omx_expected = expected_omx_agents(target, contract_path, display_name)
     if not omx_path.exists():
@@ -897,6 +1172,8 @@ def command_install(args: argparse.Namespace) -> int:
         omx_bin=args.omx_bin,
         legacy_mode=resolve_legacy_mode(args.mode),
         program_pack=args.program_pack,
+        root_agents_policy=args.root_agents_policy,
+        project_config_policy=args.project_config_policy,
     )
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
@@ -928,6 +1205,8 @@ def command_upgrade(args: argparse.Namespace) -> int:
         omx_bin=args.omx_bin,
         legacy_mode=resolve_legacy_mode(args.mode) or metadata.get("legacy_mode"),
         program_pack=args.program_pack if args.program_pack is not None else metadata_program_pack(metadata),
+        root_agents_policy=args.root_agents_policy,
+        project_config_policy=args.project_config_policy,
     )
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
@@ -950,6 +1229,8 @@ def command_reconcile(args: argparse.Namespace) -> int:
         omx_bin=args.omx_bin,
         legacy_mode=metadata.get("legacy_mode"),
         program_pack=args.program_pack if args.program_pack is not None else metadata_program_pack(metadata),
+        root_agents_policy=args.root_agents_policy,
+        project_config_policy=args.project_config_policy,
     )
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
@@ -972,6 +1253,8 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("--scope", default=scope_default, choices=["project", "user"], help="OMX setup scope")
         sp.add_argument("--omx-bin", default="omx", help="omx executable to use")
         sp.add_argument("--program-pack", choices=program_pack_choices(), help="Optional long-horizon program scaffold pack")
+        sp.add_argument("--root-agents-policy", choices=ROOT_AGENTS_POLICIES, help="How to update the repository root AGENTS.md")
+        sp.add_argument("--project-config-policy", choices=PROJECT_CONFIG_POLICIES, help="How to update project .codex/config.toml")
         sp.add_argument("--verbose", action="store_true")
         sp.add_argument("--force", action="store_true", help="Pass --force to omx setup when invoked")
 
