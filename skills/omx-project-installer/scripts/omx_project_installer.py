@@ -30,6 +30,43 @@ PROJECT_CONFIG_POLICIES = ("auto", "preserve", "setup-output")
 LEGACY_PROJECT_CONFIG_TABLE_PATHS = (
     ("mcp_servers", "omx_team_run"),
 )
+REQUIRED_ROOT_WORKTREE_DISCIPLINE = (
+    ("omx-worktree-heading", "## OMX Worktree Discipline"),
+    (
+        "heavy-omx-must-use-worktree",
+        "Heavy OMX work must run in an isolated worktree created from current `main`.",
+    ),
+    (
+        "heavy-omx-definition",
+        "Heavy OMX work includes `ralph`, `team`, `autopilot`, other long-running tmux-backed OMX sessions, and any lane expected to leave durable runtime state under `.omx/state/`.",
+    ),
+    (
+        "shared-root-stays-light",
+        "Keep the shared root checkout on `main` for light reads, planning, review, absorb-to-`main`, push, and cleanup; do not let it become the long-running owner checkout.",
+    ),
+    (
+        "single-heavy-mainline-per-worktree",
+        "Allow at most one active heavy OMX mainline per worktree. If multiple long-running lanes are needed, create multiple worktrees.",
+    ),
+    (
+        "clean-owner-worktree-before-start",
+        "Before starting a new heavy OMX lane, ensure the owner worktree is clean and free of stale `.omx/state/sessions/*`, lingering tmux sessions, and stale `skill-active` state.",
+    ),
+    (
+        "cleanup-after-stop",
+        "After the lane stops, either absorb the verified commits back to `main` or explicitly abandon the lane, then remove its worktree/branch and clear related tmux/session state.",
+    ),
+    (
+        "no-session-only-isolation",
+        "Do not rely on session-only isolation to prevent hook interference; use physical worktree isolation.",
+    ),
+)
+ROOT_RUNTIME_STATE_FILES = (
+    "session.json",
+    "skill-active-state.json",
+    "ralph-state.json",
+    "team-state.json",
+)
 
 
 def now_utc() -> str:
@@ -69,6 +106,186 @@ def read_text(path: Path) -> str:
 def write_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+
+
+def command_capture(cmd: list[str], cwd: Path) -> dict[str, Any]:
+    try:
+        completed = subprocess.run(cmd, cwd=cwd, check=False, capture_output=True, text=True)
+    except FileNotFoundError:
+        return {
+            "available": False,
+            "returncode": None,
+            "stdout": "",
+            "stderr": "command-not-found",
+        }
+    return {
+        "available": True,
+        "returncode": completed.returncode,
+        "stdout": completed.stdout,
+        "stderr": completed.stderr,
+    }
+
+
+def resolve_git_probe_path(target: Path, raw: str) -> Path:
+    candidate = Path(raw)
+    if candidate.is_absolute():
+        return candidate.resolve()
+    return (target / raw).resolve()
+
+
+def parse_git_worktree_porcelain(payload: str) -> list[dict[str, str]]:
+    entries: list[dict[str, str]] = []
+    current: dict[str, str] = {}
+    for line in payload.splitlines():
+        if not line.strip():
+            if current:
+                entries.append(current)
+                current = {}
+            continue
+        key, _, value = line.partition(" ")
+        if key == "worktree" and current:
+            entries.append(current)
+            current = {}
+        current[key] = value
+    if current:
+        entries.append(current)
+    return entries
+
+
+def inspect_static_contract_compatibility(target: Path) -> dict[str, Any]:
+    result = {
+        "in_sync": True,
+        "path": "AGENTS.md",
+        "missing": [],
+    }
+    root_path = target / "AGENTS.md"
+    if not root_path.exists():
+        result["in_sync"] = False
+        result["missing"].append("AGENTS.md:missing")
+        return result
+    content = read_text(root_path)
+    for label, required_text in REQUIRED_ROOT_WORKTREE_DISCIPLINE:
+        if required_text not in content:
+            result["missing"].append(label)
+    result["in_sync"] = not result["missing"]
+    return result
+
+
+def inspect_runtime_compatibility(target: Path) -> dict[str, Any]:
+    result = {
+        "in_sync": True,
+        "git_available": False,
+        "checkout_kind": "",
+        "branch": "",
+        "linked_worktree_count": 0,
+        "worktrees": [],
+        "root_state_files": [],
+        "session_directories": [],
+        "team_directories": [],
+        "tmux_sessions": [],
+        "notes": [],
+        "risks": [],
+    }
+
+    state_root = target / ".omx" / "state"
+    result["root_state_files"] = [
+        (state_root / name).relative_to(target).as_posix()
+        for name in ROOT_RUNTIME_STATE_FILES
+        if (state_root / name).exists()
+    ]
+
+    sessions_root = state_root / "sessions"
+    if sessions_root.exists():
+        result["session_directories"] = sorted(
+            path.relative_to(target).as_posix()
+            for path in sessions_root.iterdir()
+            if path.is_dir()
+        )
+
+    team_root = state_root / "team"
+    if team_root.exists():
+        result["team_directories"] = sorted(
+            path.relative_to(target).as_posix()
+            for path in team_root.iterdir()
+            if path.is_dir()
+        )
+
+    if result["root_state_files"]:
+        result["risks"].append(
+            "root-runtime-state-present:" + ",".join(result["root_state_files"])
+        )
+    if result["session_directories"]:
+        result["risks"].append(
+            "session-directories-present:" + str(len(result["session_directories"]))
+        )
+    if result["team_directories"]:
+        result["risks"].append(
+            "team-state-directories-present:" + str(len(result["team_directories"]))
+        )
+
+    git_probe = command_capture(["git", "rev-parse", "--is-inside-work-tree"], target)
+    if git_probe["available"] and git_probe["returncode"] == 0 and git_probe["stdout"].strip() == "true":
+        result["git_available"] = True
+        branch_probe = command_capture(["git", "branch", "--show-current"], target)
+        if branch_probe["available"] and branch_probe["returncode"] == 0:
+            result["branch"] = branch_probe["stdout"].strip()
+
+        git_dir_probe = command_capture(["git", "rev-parse", "--absolute-git-dir"], target)
+        common_dir_probe = command_capture(["git", "rev-parse", "--git-common-dir"], target)
+        if (
+            git_dir_probe["available"]
+            and git_dir_probe["returncode"] == 0
+            and common_dir_probe["available"]
+            and common_dir_probe["returncode"] == 0
+        ):
+            git_dir = resolve_git_probe_path(target, git_dir_probe["stdout"].strip())
+            common_dir = resolve_git_probe_path(target, common_dir_probe["stdout"].strip())
+            result["checkout_kind"] = "linked-worktree" if git_dir != common_dir else "shared-root"
+
+        worktree_probe = command_capture(["git", "worktree", "list", "--porcelain"], target)
+        if worktree_probe["available"] and worktree_probe["returncode"] == 0:
+            entries = parse_git_worktree_porcelain(worktree_probe["stdout"])
+            result["linked_worktree_count"] = max(len(entries) - 1, 0)
+            result["worktrees"] = [entry.get("worktree", "") for entry in entries]
+    else:
+        result["notes"].append("git-inspection-unavailable")
+
+    tmux_probe = command_capture(["tmux", "ls"], target)
+    if not tmux_probe["available"]:
+        result["notes"].append("tmux-unavailable")
+    elif tmux_probe["returncode"] == 0:
+        result["tmux_sessions"] = [
+            line.split(":", 1)[0]
+            for line in tmux_probe["stdout"].splitlines()
+            if line.strip()
+        ]
+        if result["tmux_sessions"]:
+            result["risks"].append("tmux-sessions-present:" + str(len(result["tmux_sessions"])))
+    else:
+        stderr = (tmux_probe["stderr"] or "").lower()
+        if "no server running" not in stderr and "failed to connect to server" not in stderr:
+            result["notes"].append(f"tmux-inspection-error:{tmux_probe['returncode']}")
+
+    if result["checkout_kind"] == "shared-root" and result["branch"] and result["branch"] != "main":
+        result["risks"].append(f"shared-root-checkout-not-on-main:{result['branch']}")
+
+    if result["checkout_kind"] == "shared-root" and (
+        result["root_state_files"] or result["session_directories"] or result["team_directories"] or result["tmux_sessions"]
+    ):
+        result["risks"].append("shared-root-checkout-carries-runtime-state")
+
+    result["in_sync"] = not result["risks"]
+    return result
+
+
+def inspect_compatibility_audit(target: Path) -> dict[str, Any]:
+    static_contract = inspect_static_contract_compatibility(target)
+    runtime = inspect_runtime_compatibility(target)
+    return {
+        "in_sync": static_contract["in_sync"] and runtime["in_sync"],
+        "static_contract": static_contract,
+        "runtime": runtime,
+    }
 
 
 def template_path(key: str) -> Path:
@@ -1122,6 +1339,7 @@ def install_or_refresh(
         if MANIFEST.get("continuous_program_scaffold", {}).get("enabled_by_default", False):
             scaffold_result = apply_continuous_program_scaffold(target, display_name, contract_path, resolved_program_pack)
         program_pack_result = apply_program_pack(target, display_name, contract_path, resolved_program_pack)
+    compatibility_audit = inspect_compatibility_audit(target)
     write_metadata(
         target,
         scope,
@@ -1147,6 +1365,7 @@ def install_or_refresh(
             "legacy_alias_repair": alias_result,
             "continuous_program_scaffold": scaffold_result,
             "program_pack": program_pack_result,
+            "compatibility_audit": compatibility_audit,
         },
     )
     return {
@@ -1173,6 +1392,7 @@ def install_or_refresh(
         "legacy_alias_repair": alias_result,
         "continuous_program_scaffold": scaffold_result,
         "program_pack": program_pack_result,
+        "compatibility_audit": compatibility_audit,
     }
 
 
@@ -1253,6 +1473,23 @@ def diff_target(target: Path, scope: str, contract_path: Path, display_name: str
             else:
                 checks.append(f"program pack ({configured_program_pack}): missing ({', '.join(pack['missing'])})")
                 issues += 1
+    compatibility_audit = inspect_compatibility_audit(target)
+    if compatibility_audit["static_contract"]["in_sync"]:
+        checks.append("compatibility audit (static contract): ok")
+    else:
+        checks.append(
+            "compatibility audit (static contract): drift "
+            f"({', '.join(compatibility_audit['static_contract']['missing'])})"
+        )
+        issues += 1
+    if compatibility_audit["runtime"]["in_sync"]:
+        checks.append("compatibility audit (runtime): ok")
+    else:
+        checks.append(
+            "compatibility audit (runtime): risk "
+            f"({', '.join(compatibility_audit['runtime']['risks'])})"
+        )
+        issues += 1
     for line in checks:
         print(line)
     return 1 if issues else 0

@@ -208,3 +208,32 @@ python skills/omx-project-installer/scripts/omx_project_installer.py reconcile -
 当前首个 pack：
 
 - `medical_research_foundry_delivery_closeout`
+
+## 11. OPL 里的 heavy OMX 为什么要求独立 owner worktree？
+
+因为 session-only isolation 只隔离会话态，不隔离仓库写入面。
+
+也就是说，即便 session 目录分开，runtime hook、自动化链路、并发 agent 仍可能把副作用落在共享根工作树，干扰其他并行任务。
+
+因此 installer 的正式纪律是：
+
+- heavy OMX 必须在独立 owner worktree 运行
+- 不能依赖 session-only isolation 规避 hook 干扰
+- 根工作树只做轻操作（阅读、审计、收口、受控入口触发）
+
+## 12. 新增的 compatibility audit 会检查什么？
+
+它现在是双维审计，不再只看“模板有没有落到位”。
+
+第一维是静态合同（static contract）：
+
+- 根 `AGENTS.md`、`.codex/AGENTS.md`、`contracts/project-truth/AGENTS.md` 的分层完整性
+- 项目 `.codex/config.toml` 的受管字段并回与系统级 provider/model/reasoning 严格继承是否成立
+
+第二维是运行态污染风险（runtime contamination risk）：
+
+- heavy OMX 是否在独立 owner worktree 执行
+- 是否错误把 session-only isolation 当作隔离边界
+- 共享根工作树是否承载了本应在 owner worktree 执行的 runtime/hook 重操作
+
+因此 compatibility audit 的定义已经扩展到“静态合同 + 运行态污染风险”两个方面。

@@ -1,6 +1,7 @@
 import importlib.util
 import io
 import json
+import subprocess
 import sys
 import tomllib
 import unittest
@@ -73,6 +74,26 @@ class ContractLayerWriteTests(unittest.TestCase):
             self.assertIn("project truth contract lives at `contracts/project-truth/AGENTS.md`", root_content)
             self.assertIn("oh-my-codex", omx_content)
             self.assertIn("This file lives at `.codex/AGENTS.md`", omx_content)
+
+    def test_apply_root_and_contracts_writes_omx_worktree_discipline_to_root_contract(self):
+        installer = load_module()
+        with TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir)
+            contract_path = target / "contracts" / "project-truth" / "AGENTS.md"
+
+            installer.apply_root_and_contracts(target, contract_path, "Demo Project")
+
+            root_content = (target / "AGENTS.md").read_text(encoding="utf-8")
+
+            self.assertIn("## OMX Worktree Discipline", root_content)
+            self.assertIn(
+                "Heavy OMX work must run in an isolated worktree created from current `main`.",
+                root_content,
+            )
+            self.assertIn(
+                "Do not rely on session-only isolation to prevent hook interference; use physical worktree isolation.",
+                root_content,
+            )
 
 
 class ConfigInheritanceTests(unittest.TestCase):
@@ -525,6 +546,81 @@ class ReadmeSectionTests(unittest.TestCase):
 
             self.assertFalse(changed)
             self.assertEqual(result, 0)
+
+
+class CompatibilityAuditTests(unittest.TestCase):
+    def test_diff_target_reports_runtime_compatibility_risk_when_root_state_exists_on_shared_checkout(self):
+        installer = load_module()
+        with TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir)
+            subprocess.run(["git", "init", "-b", "main"], cwd=target, check=True, capture_output=True)
+            (target / ".gitignore").write_text(".omx/\n.codex/\n", encoding="utf-8")
+            contract_path = target / "contracts" / "project-truth" / "AGENTS.md"
+
+            installer.apply_root_and_contracts(target, contract_path, "Demo Project")
+            state_dir = target / ".omx" / "state"
+            (state_dir / "sessions" / "session-1").mkdir(parents=True, exist_ok=True)
+            (state_dir / "session.json").write_text('{"session_id":"session-1"}\n', encoding="utf-8")
+            (state_dir / "skill-active-state.json").write_text('{"skill":"ralph"}\n', encoding="utf-8")
+
+            with mock.patch("sys.stdout", new_callable=io.StringIO) as stdout:
+                result = installer.diff_target(target, "user", contract_path, "Demo Project")
+
+            self.assertEqual(result, 1)
+            self.assertIn("compatibility audit", stdout.getvalue())
+            self.assertIn("runtime", stdout.getvalue())
+            self.assertIn("shared", stdout.getvalue())
+
+    def test_install_or_refresh_returns_compatibility_audit_surface(self):
+        installer = load_module()
+        with TemporaryDirectory() as home_tmpdir, TemporaryDirectory() as repo_tmpdir:
+            home_root = Path(home_tmpdir)
+            user_codex = home_root / ".codex"
+            user_codex.mkdir(parents=True, exist_ok=True)
+            (user_codex / "config.toml").write_text(
+                'model_provider = "gflab"\n'
+                'model = "gpt-5.4"\n'
+                'model_reasoning_effort = "xhigh"\n'
+                '\n'
+                '[model_providers.gflab]\n'
+                'base_url = "https://example.invalid/v1"\n',
+                encoding="utf-8",
+            )
+
+            repo_root = Path(repo_tmpdir)
+            subprocess.run(["git", "init", "-b", "main"], cwd=repo_root, check=True, capture_output=True)
+            (repo_root / "contracts" / "project-truth").mkdir(parents=True, exist_ok=True)
+            (repo_root / "contracts" / "project-truth" / "AGENTS.md").write_text("# truth\n", encoding="utf-8")
+            project_codex = repo_root / ".codex"
+            project_codex.mkdir(parents=True, exist_ok=True)
+            (project_codex / "config.toml").write_text(
+                'model_provider = "gflab"\n'
+                'model = "gpt-5.4"\n'
+                'model_reasoning_effort = "high"\n'
+                '\n'
+                '[model_providers.gflab]\n'
+                'base_url = "https://placeholder.invalid/v1"\n',
+                encoding="utf-8",
+            )
+            state_dir = repo_root / ".omx" / "state"
+            (state_dir / "sessions" / "session-1").mkdir(parents=True, exist_ok=True)
+            (state_dir / "session.json").write_text('{"session_id":"session-1"}\n', encoding="utf-8")
+
+            with mock.patch.object(installer.Path, "home", return_value=home_root):
+                result = installer.install_or_refresh(
+                    target=repo_root,
+                    scope="project",
+                    contract_path=repo_root / "contracts" / "project-truth" / "AGENTS.md",
+                    display_name="Demo",
+                    run_setup=False,
+                    force_setup=False,
+                    verbose=False,
+                    omx_bin="omx",
+                )
+
+            self.assertIn("compatibility_audit", result)
+            self.assertFalse(result["compatibility_audit"]["in_sync"])
+            self.assertIn("runtime", result["compatibility_audit"])
 
 
 class MetadataSurfaceTests(unittest.TestCase):
