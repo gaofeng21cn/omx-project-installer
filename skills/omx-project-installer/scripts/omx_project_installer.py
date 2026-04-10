@@ -99,6 +99,15 @@ def omx_agents_path(target: Path) -> Path:
     return target / ".codex" / "AGENTS.md"
 
 
+def dev_host_contract_paths(target: Path) -> dict[str, Path]:
+    root = target / "contracts" / "dev-hosts"
+    return {
+        "readme": root / "README.md",
+        "omx_cli": root / "omx-cli.md",
+        "codex_app": root / "codex-app.md",
+    }
+
+
 def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
@@ -1167,6 +1176,17 @@ def apply_root_and_contracts(
     if root_written:
         write_text(root_path, root_content)
     write_text(omx_agents_path(target), render_template(template_path("omx_project_agents"), replacements))
+    host_adapter_template_map = {
+        "readme": "dev_host_readme",
+        "omx_cli": "dev_host_omx_cli",
+        "codex_app": "dev_host_codex_app",
+    }
+    host_adapters_written: list[str] = []
+    for key, path in dev_host_contract_paths(target).items():
+        rendered = render_template(template_path(host_adapter_template_map[key]), replacements)
+        if not path.exists() or read_text(path) != rendered:
+            write_text(path, rendered)
+            host_adapters_written.append(path.relative_to(target).as_posix())
     if force_contract or not contract_path.exists():
         write_text(contract_path, render_template(template_path("project_truth_contract"), replacements))
         project_contract_written = True
@@ -1178,6 +1198,7 @@ def apply_root_and_contracts(
         "root_agents_source": root_source,
         "root_agents_written": root_written,
         "root_agents_sha256": sha256_text(root_content),
+        "host_adapters_written": host_adapters_written,
     }
 
 
@@ -1221,6 +1242,7 @@ def managed_files(target: Path, contract_path: Path) -> list[str]:
         ".gitignore",
         contract_path.relative_to(target).as_posix(),
         omx_agents_path(target).relative_to(target).as_posix(),
+        *(path.relative_to(target).as_posix() for path in dev_host_contract_paths(target).values()),
     ]
 
 

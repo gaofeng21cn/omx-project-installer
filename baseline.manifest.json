@@ -1,7 +1,7 @@
 {
   "schema_version": 3,
   "baseline_name": "omx-project-installer",
-  "baseline_version": "0.5.2",
+  "baseline_version": "0.5.3",
   "installer_skill": "omx-project-installer",
   "default_scope": "project",
   "managed_metadata_file": ".agent-contract-baseline.json",
@@ -10,6 +10,9 @@
     "root_agents": "templates/AGENTS.root.template.md",
     "omx_project_agents": "templates/AGENTS.omx-project.template.md",
     "project_truth_contract": "templates/contracts/project-truth/AGENTS.md",
+    "dev_host_readme": "templates/contracts/dev-hosts/README.md",
+    "dev_host_omx_cli": "templates/contracts/dev-hosts/omx-cli.md",
+    "dev_host_codex_app": "templates/contracts/dev-hosts/codex-app.md",
     "program_current_context": "templates/omx/context/CURRENT_PROGRAM.md",
     "program_routing_context": "templates/omx/context/PROGRAM_ROUTING.md",
     "program_team_prompt": "templates/omx/context/OMX_TEAM_PROMPT.md",
@@ -54,11 +57,7 @@
     "contracts/*-repository/AGENTS.md",
     "contracts/*/AGENTS.md"
   ],
-  "legacy_cleanup_paths": [
-    "contracts/dev-hosts/README.md",
-    "contracts/dev-hosts/omx-cli.md",
-    "contracts/dev-hosts/codex-app.md"
-  ],
+  "legacy_cleanup_paths": [],
   "config_inheritance": {
     "source_scope": "user",
     "target_scope": "project",

@@ -1,7 +1,7 @@
 # OMX Compatibility Notes
 
 Current `omx setup` behavior that this installer compensates for
-(validated against `oh-my-codex v0.12.3` on 2026-04-09):
+(validated against `oh-my-codex v0.12.4` on 2026-04-10):
 
 ## A. Root `AGENTS.md` protection and layered contract preservation
 
@@ -26,6 +26,7 @@ Interpretation:
 ## C. Project config reconciliation and user-scope truth inheritance
 
 - `omx setup --scope project` writes project-local `.codex/config.toml`
+- setup preserves some project-local custom keys, but it does not re-apply strict user-scope provider / model / reasoning truth after refresh
 - setup does not restore provider / model / reasoning truth from user scope back into project scope
 - setup does not provide a project-config mode that only updates OMX-managed fields while preserving strict user-scope inheritance truth
 
@@ -42,7 +43,42 @@ That reconcile phase is responsible for:
 5. Restoring system-level provider, model, and reasoning configuration into project scope
 6. Writing baseline metadata for later diff/upgrade/reconcile operations
 
-## D. OPL heavy OMX execution discipline (external contract)
+## D. Host adapter contract consistency inside the layered project shape
+
+- the installer-managed `.codex/AGENTS.md` contract references `contracts/dev-hosts/omx-cli.md` and `contracts/dev-hosts/codex-app.md`
+- upstream `omx setup --scope project` does not create those project-level host adapter documents
+- the installer therefore manages:
+  - `contracts/dev-hosts/README.md`
+  - `contracts/dev-hosts/omx-cli.md`
+  - `contracts/dev-hosts/codex-app.md`
+
+Interpretation:
+
+- these files are part of the installer's canonical layered contract surface
+- deleting them as if they were legacy leftovers is inconsistent with the current `.codex/AGENTS.md` template
+
+## E. Project-scope legacy alias gap still exists
+
+- upstream project-scope setup installs only active/internal catalog skills
+- compatibility names such as `swarm` / `ecomode` / `ultraqa` are still routed by upstream keyword/template surfaces but are not materialized into project `.codex/skills`
+- prompt-routed compatibility names such as `analyze` / `tdd` / `build-fix` still require local wrapper recovery when a repository contract explicitly refers to them
+
+Interpretation:
+
+- legacy alias repair is still an installer responsibility when repository guidance depends on those names
+- `0.12.4` did not obsolete that repair surface
+
+## F. `0.12.4` hooks delta
+
+- upstream `0.12.4` changed `.codex/hooks.json` refresh semantics to shared ownership
+- setup now preserves non-OMX hook entries and only refreshes the managed OMX wrapper entries
+
+Interpretation:
+
+- any separate "protect hooks.json from setup overwrite" patch is now likely obsolete
+- this does **not** change the need for root contract protection, `.codex/AGENTS.md` generation, project-config reconcile, or legacy alias repair
+
+## G. OPL heavy OMX execution discipline (external contract)
 
 For OPL heavy OMX workflows (long-running automation, team/swarm runtime surfaces, or hook-heavy execution paths), installer guidance now treats execution isolation as a compatibility requirement:
 
@@ -55,7 +91,7 @@ Interpretation:
 - session runtime state isolation and repository write isolation are different boundaries
 - preventing hook interference requires worktree-level ownership, not only session-level separation
 
-## E. Compatibility audit scope (new)
+## H. Compatibility audit scope (new)
 
 Compatibility audit now explicitly covers two dimensions:
 

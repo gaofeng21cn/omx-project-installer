@@ -66,14 +66,20 @@ class ContractLayerWriteTests(unittest.TestCase):
             self.assertTrue((target / "AGENTS.md").exists())
             self.assertTrue((target / ".codex" / "AGENTS.md").exists())
             self.assertTrue(contract_path.exists())
+            self.assertTrue((target / "contracts" / "dev-hosts" / "README.md").exists())
+            self.assertTrue((target / "contracts" / "dev-hosts" / "omx-cli.md").exists())
+            self.assertTrue((target / "contracts" / "dev-hosts" / "codex-app.md").exists())
 
             root_content = (target / "AGENTS.md").read_text(encoding="utf-8")
             omx_content = (target / ".codex" / "AGENTS.md").read_text(encoding="utf-8")
+            host_readme = (target / "contracts" / "dev-hosts" / "README.md").read_text(encoding="utf-8")
 
             self.assertNotIn("oh-my-codex", root_content)
             self.assertIn("project truth contract lives at `contracts/project-truth/AGENTS.md`", root_content)
             self.assertIn("oh-my-codex", omx_content)
             self.assertIn("This file lives at `.codex/AGENTS.md`", omx_content)
+            self.assertIn("versioned host adapter contracts", host_readme)
+            self.assertIn("`contracts/project-truth/AGENTS.md`", host_readme)
 
     def test_apply_root_and_contracts_writes_omx_worktree_discipline_to_root_contract(self):
         installer = load_module()
@@ -542,7 +548,20 @@ class ReadmeSectionTests(unittest.TestCase):
 
             installer.apply_root_and_contracts(target, contract_path, "Demo Project")
             changed = installer.apply_readme_section(target, contract_path)
-            result = installer.diff_target(target, "user", contract_path, "Demo Project")
+            original_command_capture = installer.command_capture
+
+            def command_capture_without_tmux(cmd: list[str], cwd: Path) -> dict[str, object]:
+                if cmd and cmd[0] == "tmux":
+                    return {
+                        "available": False,
+                        "returncode": None,
+                        "stdout": "",
+                        "stderr": "command-not-found",
+                    }
+                return original_command_capture(cmd, cwd)
+
+            with mock.patch.object(installer, "command_capture", side_effect=command_capture_without_tmux):
+                result = installer.diff_target(target, "user", contract_path, "Demo Project")
 
             self.assertFalse(changed)
             self.assertEqual(result, 0)
@@ -635,10 +654,13 @@ class MetadataSurfaceTests(unittest.TestCase):
             managed = installer.managed_files(target, contract_path)
 
             self.assertNotIn("README.md", managed)
+            self.assertIn("contracts/dev-hosts/README.md", managed)
+            self.assertIn("contracts/dev-hosts/omx-cli.md", managed)
+            self.assertIn("contracts/dev-hosts/codex-app.md", managed)
 
 
 class LegacyCleanupTests(unittest.TestCase):
-    def test_reconcile_removes_legacy_dev_hosts_files(self):
+    def test_install_or_refresh_refreshes_dev_host_contracts_instead_of_removing_them(self):
         installer = load_module()
         with TemporaryDirectory() as home_tmpdir, TemporaryDirectory() as repo_tmpdir:
             home_root = Path(home_tmpdir)
@@ -691,9 +713,18 @@ class LegacyCleanupTests(unittest.TestCase):
                     omx_bin="omx",
                 )
 
-            self.assertFalse((legacy_dir / "README.md").exists())
-            self.assertFalse((legacy_dir / "omx-cli.md").exists())
-            self.assertFalse((legacy_dir / "codex-app.md").exists())
+            self.assertEqual(
+                (legacy_dir / "README.md").read_text(encoding="utf-8").splitlines()[0],
+                "# Development Host Adapters",
+            )
+            self.assertIn(
+                "Use this host adapter when the current session is actually running under OMX CLI/runtime.",
+                (legacy_dir / "omx-cli.md").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "Use this host adapter when the session is running in Codex App or plain Codex without OMX runtime.",
+                (legacy_dir / "codex-app.md").read_text(encoding="utf-8"),
+            )
 
     def test_install_or_refresh_repairs_legacy_project_skill_aliases(self):
         installer = load_module()

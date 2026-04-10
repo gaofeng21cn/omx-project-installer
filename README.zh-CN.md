@@ -30,6 +30,13 @@
 
 这个仓库不替代 `omx setup`。它的职责，是让 `project-scope` OMX 能够安全落进那些已经有自己根合同、公开 README 和项目规则的真实仓库里。
 
+当前结论按 `oh-my-codex v0.12.4` 于 2026-04-10 实测校准：
+
+- upstream 在 `project` scope 下仍然写项目根 `AGENTS.md`
+- upstream 仍然不会生成项目级 `.codex/AGENTS.md`
+- upstream 仍然不会把 user-scope 的 provider / model / reasoning 真相严格恢复回项目 `.codex/config.toml`
+- upstream `0.12.4` 已经把 `.codex/hooks.json` 改成 shared ownership，因此这个 baseline 不再把“保护 hooks 文件不被覆盖”当成兼容补丁面
+
 核心模型是：
 
 `omx setup -> post-setup reconcile`
@@ -56,6 +63,7 @@
 - 根 `AGENTS.md`
 - `.codex/AGENTS.md`
 - `contracts/project-truth/AGENTS.md`
+- `contracts/dev-hosts/{README,omx-cli,codex-app}.md`
 - `.omx/local/AGENTS.local.md`
 
 仓库之间的差异放在 `contracts/project-truth/AGENTS.md` 的内容里，而不是放在多套安装模式里。
@@ -65,7 +73,8 @@
 - 根 `AGENTS.md` 的受控保留
 - 项目 `.codex/config.toml` 的受控收口
 - 系统级 provider / model 继承
-- project-scope skill 布局里的 legacy alias 修复
+- `contracts/dev-hosts/` 下的 host adapter 合同受管输出
+- project-scope skill 布局里 upstream 仍不会实体化的 legacy alias 修复
 - 面向 `Codex App + OMX` 的稳定 planning control surface
 
 ## 快速开始

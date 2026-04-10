@@ -30,6 +30,13 @@
 
 This repository does not replace `omx setup`. Its job is to make `project-scope` OMX usable in repositories that already have their own root contract, public README, and project-specific operating rules.
 
+Validated against `oh-my-codex v0.12.4` on 2026-04-10:
+
+- upstream still writes project-root `AGENTS.md` for `project` scope
+- upstream still does not generate project `.codex/AGENTS.md`
+- upstream still does not restore strict user-scope provider / model / reasoning truth into project `.codex/config.toml`
+- upstream `0.12.4` now preserves non-OMX entries in `.codex/hooks.json`, so extra hook-file protection is no longer part of this baseline
+
 The core model is:
 
 `omx setup -> post-setup reconcile`
@@ -56,6 +63,7 @@ The installed project shape is always:
 - root `AGENTS.md`
 - `.codex/AGENTS.md`
 - `contracts/project-truth/AGENTS.md`
+- `contracts/dev-hosts/{README,omx-cli,codex-app}.md`
 - `.omx/local/AGENTS.local.md`
 
 Repository differences belong inside `contracts/project-truth/AGENTS.md`, not inside multiple install modes.
@@ -65,7 +73,8 @@ The current compatibility surface also covers:
 - controlled root `AGENTS.md` preservation
 - controlled project `.codex/config.toml` reconcile
 - system-level provider and model inheritance
-- legacy alias repair for project-scope skill layouts
+- managed host adapter contracts under `contracts/dev-hosts/`
+- legacy alias repair for project-scope skill layouts that upstream still does not materialize
 - a stable planning control surface for `Codex App + OMX`
 
 ## Quick Start
