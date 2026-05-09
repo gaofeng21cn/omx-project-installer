@@ -76,10 +76,37 @@ class ContractLayerWriteTests(unittest.TestCase):
 
             self.assertNotIn("oh-my-codex", root_content)
             self.assertIn("project truth contract lives at `contracts/project-truth/AGENTS.md`", root_content)
+            self.assertIn("Codex-default host-agent runtime", root_content)
+            self.assertIn("Hermes or Hermes-Agent may be used only when the project explicitly selects", root_content)
             self.assertIn("oh-my-codex", omx_content)
             self.assertIn("This file lives at `.codex/AGENTS.md`", omx_content)
             self.assertIn("versioned host adapter contracts", host_readme)
             self.assertIn("`contracts/project-truth/AGENTS.md`", host_readme)
+            self.assertIn("Hermes or Hermes-Agent is an explicit optional hosted runtime/provider choice", host_readme)
+
+    def test_apply_root_and_contracts_keeps_default_runtime_provider_neutral(self):
+        installer = load_module()
+        with TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir)
+            contract_path = target / "contracts" / "project-truth" / "AGENTS.md"
+
+            installer.apply_root_and_contracts(target, contract_path, "Demo Project")
+
+            generated = "\n".join(
+                path.read_text(encoding="utf-8")
+                for path in (
+                    target / "AGENTS.md",
+                    target / ".codex" / "AGENTS.md",
+                    target / "contracts" / "dev-hosts" / "README.md",
+                    target / "contracts" / "dev-hosts" / "omx-cli.md",
+                    target / "contracts" / "dev-hosts" / "codex-app.md",
+                )
+            )
+
+            self.assertNotRegex(generated.lower(), r"hermes[\w -]*(required|mandatory)")
+            self.assertNotRegex(generated.lower(), r"(required|mandatory)[\w -]*hermes")
+            self.assertNotRegex(generated.lower(), r"hermes[\w -]*(default|baseline) runtime")
+            self.assertIn("explicit optional hosted runtime/provider", generated)
 
     def test_apply_root_and_contracts_writes_omx_worktree_discipline_to_root_contract(self):
         installer = load_module()
@@ -724,6 +751,14 @@ class LegacyCleanupTests(unittest.TestCase):
             self.assertIn(
                 "Use this host adapter when the session is running in Codex App or plain Codex without OMX runtime.",
                 (legacy_dir / "codex-app.md").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "Hermes or Hermes-Agent as an explicit optional hosted runtime/provider",
+                (legacy_dir / "codex-app.md").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "Use Hermes or Hermes-Agent only through an explicit project-selected hosted runtime/provider setting",
+                (legacy_dir / "omx-cli.md").read_text(encoding="utf-8"),
             )
 
     def test_install_or_refresh_repairs_legacy_project_skill_aliases(self):

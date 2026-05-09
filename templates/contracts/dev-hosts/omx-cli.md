@@ -16,9 +16,9 @@ Typical signals include:
 - Runtime-only workflows such as `autopilot`, `ralph`, `ultrawork`, `ultraqa`, `team`, and `ecomode` may be activated when their normal gates are satisfied
 - OMX runtime state, `.omx/` artifacts, tmux workers, and `omx team` lifecycle surfaces may be treated as first-class execution infrastructure
 - `omx explore` and `omx sparkshell` may be preferred for qualifying read-only workflows when the repository contract enables them
+- Use Hermes or Hermes-Agent only through an explicit project-selected hosted runtime/provider setting
 
 ## Boundary
 
 This adapter controls host behavior only.
 It must not override the project truth source in `{{PROJECT_CONTRACT_PATH}}`.
-

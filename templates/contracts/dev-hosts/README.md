@@ -18,6 +18,14 @@ Use the following layering model:
 - `omx-cli.md`: host behavior when the session is running under OMX CLI/runtime
 - `codex-app.md`: host behavior when the session is running in Codex App or plain Codex without OMX runtime
 
+## Runtime Provider Boundary
+
+Generated projects default to `Codex-default host-agent runtime`.
+Schedulers, controllers, and adapters that belong to the project domain stay in the target repository's project truth or machine-readable contracts.
+
+Hermes or Hermes-Agent is an explicit optional hosted runtime/provider choice.
+Do not infer it from OMX installation and do not require it for the default Codex path.
+
 ## Local Overlay Convention
 
 Machine-specific paths, personal shell workflow, private launch hints, and other non-portable guidance belong in:

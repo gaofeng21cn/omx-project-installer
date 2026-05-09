@@ -102,6 +102,18 @@ python skills/omx-project-installer/scripts/omx_project_installer.py reconcile -
 
 这样项目级 `.codex/config.toml` 不会进入版本库。
 
+## 3.1 它会默认要求 Hermes / Hermes-Agent 吗？
+
+不会。
+
+installer 生成的默认运行形态是：
+
+- `Codex-default host-agent runtime`
+- 目标项目自己持有 scheduler / adapter / controller 边界
+- 项目 `.codex/config.toml` 只继承系统级 provider / model / reasoning 真相
+
+Hermes / Hermes-Agent 只能作为显式选择的 hosted runtime 或 provider 边界出现。installer 不会把它写进默认依赖路径，也不会在默认配置里合成 Hermes 连接信息。
+
 ## 4. 我需要区分 `runtime-service` 和 `project-native` 吗？
 
 不需要。

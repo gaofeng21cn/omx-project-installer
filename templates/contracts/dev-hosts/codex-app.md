@@ -16,9 +16,10 @@ Typical signals include:
 - Treat `autopilot`, `ralph`, `ultrawork`, `ultraqa`, `team`, and `ecomode` as runtime-only workflows that require explicit OMX runtime support
 - Prefer App-safe surfaces such as `deep-interview`, `ralplan`, `plan`, `/prompts:*`, and native subagents
 - If the user explicitly wants OMX runtime behavior, launch it through the shell instead of pretending the App session already has runtime state
+- Keep the default runtime as Codex-default host-agent execution with project-owned schedulers/adapters
+- Treat Hermes or Hermes-Agent as an explicit optional hosted runtime/provider only when the project selects it
 
 ## Boundary
 
 This adapter controls host behavior only.
 It must not override the project truth source in `{{PROJECT_CONTRACT_PATH}}`.
-

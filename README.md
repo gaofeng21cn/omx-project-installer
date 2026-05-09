@@ -74,6 +74,8 @@ The current compatibility surface also covers:
 - controlled project `.codex/config.toml` reconcile
 - system-level provider and model inheritance
 - managed host adapter contracts under `contracts/dev-hosts/`
+- Codex-default host-agent runtime as the generated default, with domain-owned schedulers and adapters staying inside the target project
+- explicit opt-in hosted runtime/provider boundaries for Hermes or Hermes-Agent when a project chooses that integration
 - legacy alias repair for project-scope skill layouts that upstream still does not materialize
 - a stable planning control surface for `Codex App + OMX`
 

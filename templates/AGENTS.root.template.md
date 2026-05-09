@@ -24,6 +24,12 @@ Read that file first whenever repository-specific goals, architecture priorities
 - Run the relevant tests, type checks, and validation commands before claiming completion.
 - Final reports should include what changed and any remaining risks or known gaps.
 
+## Default Runtime Boundary
+
+- The generated default is `Codex-default host-agent runtime`.
+- Domain-owned schedulers, controllers, and adapters belong in the target project, not in the installer baseline.
+- Hermes or Hermes-Agent may be used only when the project explicitly selects that hosted runtime or provider.
+
 ## OMX Worktree Discipline
 
 - Heavy OMX work must run in an isolated worktree created from current `main`.

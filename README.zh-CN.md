@@ -74,6 +74,8 @@
 - 项目 `.codex/config.toml` 的受控收口
 - 系统级 provider / model 继承
 - `contracts/dev-hosts/` 下的 host adapter 合同受管输出
+- 生成默认运行形态保持为 `Codex-default host-agent runtime`，目标项目自己的 scheduler / adapter 继续由领域项目持有
+- Hermes / Hermes-Agent 只作为项目显式选择时的 hosted runtime 或 provider 边界
 - project-scope skill 布局里 upstream 仍不会实体化的 legacy alias 修复
 - 面向 `Codex App + OMX` 的稳定 planning control surface
 

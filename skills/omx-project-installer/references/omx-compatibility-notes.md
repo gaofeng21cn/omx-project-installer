@@ -57,6 +57,18 @@ Interpretation:
 - these files are part of the installer's canonical layered contract surface
 - deleting them as if they were legacy leftovers is inconsistent with the current `.codex/AGENTS.md` template
 
+## D.1 Optional hosted runtime/provider boundary
+
+- generated project contracts default to `Codex-default host-agent runtime`
+- project/domain schedulers, controllers, adapters, and gateway contracts remain owned by the target repository
+- Hermes / Hermes-Agent must be selected through an explicit hosted runtime or provider setting when a project chooses that integration
+- generated defaults do not create provider-specific hosted runtime config and do not infer Hermes from OMX installation alone
+
+Interpretation:
+
+- OMX project installation is a development orchestration layer, not proof that the runtime substrate is Hermes
+- downstream repos should express Hermes only as an optional provider/hosted runtime choice, with their Codex-default path still valid
+
 ## E. Project-scope legacy alias gap still exists
 
 - upstream project-scope setup installs only active/internal catalog skills
